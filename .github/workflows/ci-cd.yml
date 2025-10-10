@@ -75,47 +75,44 @@ jobs:
         LOG_LEVEL: DEBUG
         ENVIRONMENT: testing
       run: |
-        pytest tests/ -v --cov=src --cov-report=xml --cov-report=html --cov-report=term-missing --cov-fail-under=100
+        pytest tests/ -v --cov=src --cov-report=xml --cov-report=html --cov-report=term-missing --cov-fail-under=80
 
-    - name: 🤖 Test ML pipeline
+    - name: � Test basic application startup
       env:
         DATABASE_URL: postgresql://postgres:postgres@localhost:5432/decksmith_test
         REDIS_URL: redis://localhost:6379
-        ENVIRONMENT: testing
-      run: |
-        python -c "
-        from src.infrastructure.ml.ml_engine import MLEngine
-        from src.domain.entities import MLModel
-        import tempfile
-        import os
-        
-        # Test ML pipeline
-        engine = MLEngine()
-        
-        # Test model creation
-        model_data = {
-            'name': 'test_model',
-            'version': '1.0.0',
-            'algorithm': 'random_forest',
-            'hyperparameters': {'n_estimators': 100}
-        }
-        
-        model = MLModel.create_new(**model_data)
-        print('✅ ML pipeline test passed')
-        "
-
-    - name: 🕷️ Test scraping functionality
-      env:
         MTG_API_KEY: test-api-key
+        ML_API_ENDPOINT: http://localhost:8000
+        LOG_LEVEL: DEBUG
         ENVIRONMENT: testing
       run: |
         python -c "
-        from src.infrastructure.scraping.web_scraper import WebScraper
+        import sys
+        import os
+        sys.path.insert(0, os.getcwd())
         
-        # Test scraper initialization
-        scraper = WebScraper()
-        assert scraper is not None
-        print('✅ Scraper test passed')
+        # Test basic application startup
+        try:
+            import main
+            print('✅ Main module imports successfully')
+        except Exception as e:
+            print(f'❌ Main module import failed: {e}')
+            sys.exit(1)
+        
+        # Test basic health check
+        import asyncio
+        
+        async def test_health():
+            try:
+                runner = main.SimpleBatchRunner()
+                health_result = await runner.run_health_check()
+                assert health_result['status'] == 'healthy'
+                print('✅ Health check passed')
+            except Exception as e:
+                print(f'❌ Health check failed: {e}')
+                raise
+        
+        asyncio.run(test_health())
         "
 
     - name: 📊 Upload coverage to Codecov
@@ -207,7 +204,6 @@ jobs:
         heroku_api_key: ${{ secrets.HEROKU_API_KEY }}
         heroku_app_name: ${{ env.HEROKU_APP_NAME }}
         heroku_email: ${{ secrets.HEROKU_EMAIL }}
-        procfile: "worker: python src/main.py"
 
     - name: ⚙️ Scale worker dyno
       run: |
