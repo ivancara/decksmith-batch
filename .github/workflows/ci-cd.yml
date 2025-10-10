@@ -1,0 +1,236 @@
+name: 🔄 DeckSmith Batch - CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  PYTHON_VERSION: '3.11'
+  HEROKU_APP_NAME: 'decksmith-batch'
+
+jobs:
+  test:
+    name: 🧪 Tests & Quality Checks
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:14
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: decksmith_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      
+      redis:
+        image: redis:7
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    steps:
+    - name: 📥 Checkout code
+      uses: actions/checkout@v4
+
+    - name: 🐍 Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+        cache: 'pip'
+
+    - name: 📦 Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest pytest-cov pytest-asyncio requests-mock
+
+    - name: 🔍 Lint with flake8
+      run: |
+        pip install flake8
+        flake8 src/ --count --select=E9,F63,F7,F82 --show-source --statistics
+        flake8 src/ --count --exit-zero --max-complexity=10 --max-line-length=88 --statistics
+
+    - name: 🎯 Type checking with mypy
+      run: |
+        pip install mypy
+        mypy src/ --ignore-missing-imports
+
+    - name: 🧪 Run unit tests with coverage
+      env:
+        DATABASE_URL: postgresql://postgres:postgres@localhost:5432/decksmith_test
+        REDIS_URL: redis://localhost:6379
+        MTG_API_KEY: test-api-key
+        ML_API_ENDPOINT: http://localhost:8000
+        LOG_LEVEL: DEBUG
+        ENVIRONMENT: testing
+      run: |
+        pytest tests/ -v --cov=src --cov-report=xml --cov-report=html --cov-report=term-missing --cov-fail-under=100
+
+    - name: 🤖 Test ML pipeline
+      env:
+        DATABASE_URL: postgresql://postgres:postgres@localhost:5432/decksmith_test
+        REDIS_URL: redis://localhost:6379
+        ENVIRONMENT: testing
+      run: |
+        python -c "
+        from src.infrastructure.ml.ml_engine import MLEngine
+        from src.domain.entities import MLModel
+        import tempfile
+        import os
+        
+        # Test ML pipeline
+        engine = MLEngine()
+        
+        # Test model creation
+        model_data = {
+            'name': 'test_model',
+            'version': '1.0.0',
+            'algorithm': 'random_forest',
+            'hyperparameters': {'n_estimators': 100}
+        }
+        
+        model = MLModel.create_new(**model_data)
+        print('✅ ML pipeline test passed')
+        "
+
+    - name: 🕷️ Test scraping functionality
+      env:
+        MTG_API_KEY: test-api-key
+        ENVIRONMENT: testing
+      run: |
+        python -c "
+        from src.infrastructure.scraping.web_scraper import WebScraper
+        
+        # Test scraper initialization
+        scraper = WebScraper()
+        assert scraper is not None
+        print('✅ Scraper test passed')
+        "
+
+    - name: 📊 Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage.xml
+        flags: batch
+        name: decksmith-batch
+        fail_ci_if_error: true
+
+  integration:
+    name: 🔗 Integration Tests
+    runs-on: ubuntu-latest
+    needs: test
+
+    services:
+      postgres:
+        image: postgres:14
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: decksmith_test
+        ports:
+          - 5432:5432
+      
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+
+    steps:
+    - name: 📥 Checkout code
+      uses: actions/checkout@v4
+
+    - name: 🐍 Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+
+    - name: 📦 Install dependencies
+      run: |
+        pip install -r requirements.txt
+        pip install pytest
+
+    - name: 🔗 Run integration tests
+      env:
+        DATABASE_URL: postgresql://postgres:postgres@localhost:5432/decksmith_test
+        REDIS_URL: redis://localhost:6379
+        ENVIRONMENT: testing
+      run: |
+        pytest tests/integration/ -v
+
+  security:
+    name: 🔒 Security Scan
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+    - name: 📥 Checkout code
+      uses: actions/checkout@v4
+
+    - name: 🐍 Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+
+    - name: 🔍 Run safety check
+      run: |
+        pip install safety
+        safety check --json
+
+    - name: 🛡️ Run bandit security scan
+      run: |
+        pip install bandit
+        bandit -r src/ -f json
+
+  deploy:
+    name: 🚀 Deploy to Heroku
+    runs-on: ubuntu-latest
+    needs: [test, integration, security]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    steps:
+    - name: 📥 Checkout code
+      uses: actions/checkout@v4
+
+    - name: 🚀 Deploy to Heroku
+      uses: akhileshns/heroku-deploy@v3.12.14
+      with:
+        heroku_api_key: ${{ secrets.HEROKU_API_KEY }}
+        heroku_app_name: ${{ env.HEROKU_APP_NAME }}
+        heroku_email: ${{ secrets.HEROKU_EMAIL }}
+        procfile: "worker: python src/main.py"
+
+    - name: ⚙️ Scale worker dyno
+      run: |
+        curl -X PATCH https://api.heroku.com/apps/${{ env.HEROKU_APP_NAME }}/formation \
+          -H "Content-Type: application/json" \
+          -H "Accept: application/vnd.heroku+json; version=3" \
+          -H "Authorization: Bearer ${{ secrets.HEROKU_API_KEY }}" \
+          -d '{"updates":[{"type":"worker","quantity":1}]}'
+
+    - name: 📊 Verify deployment
+      run: |
+        sleep 30
+        # Check if worker is running via Heroku API
+        curl -s https://api.heroku.com/apps/${{ env.HEROKU_APP_NAME }}/dynos \
+          -H "Authorization: Bearer ${{ secrets.HEROKU_API_KEY }}" \
+          -H "Accept: application/vnd.heroku+json; version=3" | \
+          grep -q "worker" && echo "✅ Worker deployed successfully" || exit 1
+
+    - name: 📱 Notify deployment
+      if: always()
+      run: |
+        if [ "${{ job.status }}" == "success" ]; then
+          echo "✅ DeckSmith Batch deployed successfully as Heroku Worker"
+        else
+          echo "❌ DeckSmith Batch deployment failed"
+        fi
