@@ -159,6 +159,87 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+-- Função para ativar um modelo ML específico
+CREATE OR REPLACE FUNCTION activate_ml_model(
+    p_model_name VARCHAR(100),
+    p_model_type VARCHAR(50) DEFAULT NULL
+) RETURNS BOOLEAN AS $$
+DECLARE
+    v_model_id UUID;
+BEGIN
+    -- Verificar se o modelo existe
+    SELECT id INTO v_model_id 
+    FROM ml_models 
+    WHERE name = p_model_name 
+    AND (p_model_type IS NULL OR algorithm = p_model_type)
+    AND status IN ('trained', 'validated');
+    
+    IF v_model_id IS NULL THEN
+        RAISE EXCEPTION 'Modelo % não encontrado ou não está pronto para ativação', p_model_name;
+    END IF;
+    
+    -- Desativar todos os modelos do mesmo tipo (se especificado)
+    IF p_model_type IS NOT NULL THEN
+        UPDATE ml_models 
+        SET is_active = false, 
+            is_production = false
+        WHERE algorithm = p_model_type;
+    END IF;
+    
+    -- Ativar o modelo específico
+    UPDATE ml_models 
+    SET is_active = true, 
+        is_production = true,
+        status = 'active',
+        deployed_at = CURRENT_TIMESTAMP
+    WHERE id = v_model_id;
+    
+    RETURN true;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Função para obter configuração administrativa
+CREATE OR REPLACE FUNCTION get_admin_setting(
+    p_setting_key VARCHAR(100)
+) RETURNS JSONB AS $$
+DECLARE
+    v_setting_value JSONB;
+BEGIN
+    SELECT setting_value INTO v_setting_value
+    FROM admin_settings 
+    WHERE setting_key = p_setting_key 
+    AND is_active = true;
+    
+    IF v_setting_value IS NULL THEN
+        RAISE EXCEPTION 'Configuração % não encontrada', p_setting_key;
+    END IF;
+    
+    RETURN v_setting_value;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Função para definir configuração administrativa
+CREATE OR REPLACE FUNCTION set_admin_setting(
+    p_setting_key VARCHAR(100),
+    p_setting_value JSONB,
+    p_setting_category VARCHAR(50) DEFAULT 'general',
+    p_description TEXT DEFAULT NULL,
+    p_updated_by VARCHAR(100) DEFAULT 'system'
+) RETURNS BOOLEAN AS $$
+BEGIN
+    INSERT INTO admin_settings (setting_key, setting_value, setting_category, description, updated_by)
+    VALUES (p_setting_key, p_setting_value, p_setting_category, p_description, p_updated_by)
+    ON CONFLICT (setting_key) DO UPDATE SET
+        setting_value = EXCLUDED.setting_value,
+        setting_category = EXCLUDED.setting_category,
+        description = COALESCE(EXCLUDED.description, admin_settings.description),
+        updated_by = EXCLUDED.updated_by,
+        updated_at = CURRENT_TIMESTAMP;
+    
+    RETURN true;
+END;
+$$ LANGUAGE plpgsql;
+
 -- ============================================================================
 -- SEÇÃO 5: SISTEMA DE PERMISSÕES E PLANOS
 -- ============================================================================
@@ -830,7 +911,30 @@ CREATE TABLE ml_model_configs (
 );
 
 -- ============================================================================
--- SEÇÃO 10: ANALYTICS E LOGS
+-- SEÇÃO 10: SISTEMA DE CONFIGURAÇÕES ADMINISTRATIVAS
+-- ============================================================================
+
+-- Tabela de configurações administrativas
+CREATE TABLE admin_settings (
+    id SERIAL PRIMARY KEY,
+    setting_key VARCHAR(100) NOT NULL UNIQUE,
+    setting_value JSONB NOT NULL,
+    setting_category VARCHAR(50) NOT NULL DEFAULT 'general',
+    description TEXT,
+    is_active BOOLEAN DEFAULT true,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    created_by VARCHAR(100),
+    updated_by VARCHAR(100),
+    
+    CONSTRAINT admin_settings_key_check CHECK (setting_key ~ '^[a-z0-9_]+$'),
+    CONSTRAINT admin_settings_category_check CHECK (setting_category IN (
+        'general', 'ml_models', 'data_export', 'batch_processing', 'security'
+    ))
+);
+
+-- ============================================================================
+-- SEÇÃO 11: ANALYTICS E LOGS
 -- ============================================================================
 
 -- Analytics de uso
@@ -869,6 +973,11 @@ CREATE TABLE api_cache (
 -- ============================================================================
 -- SEÇÃO 11: ÍNDICES OTIMIZADOS
 -- ============================================================================
+
+-- Índices para admin_settings
+CREATE INDEX idx_admin_settings_category ON admin_settings (setting_category);
+CREATE INDEX idx_admin_settings_key ON admin_settings (setting_key);
+CREATE INDEX idx_admin_settings_active ON admin_settings (is_active) WHERE is_active = true;
 
 -- Índices para sistema de permissões
 CREATE INDEX idx_users_user_plan_id ON users (user_plan_id);
@@ -972,6 +1081,7 @@ CREATE INDEX idx_ml_model_configs_active ON ml_model_configs (is_active) WHERE i
 -- ============================================================================
 
 -- Triggers para updated_at
+CREATE TRIGGER tr_admin_settings_updated_at BEFORE UPDATE ON admin_settings FOR EACH ROW EXECUTE FUNCTION update_timestamp();
 CREATE TRIGGER tr_users_updated_at BEFORE UPDATE ON users FOR EACH ROW EXECUTE FUNCTION update_timestamp();
 CREATE TRIGGER tr_user_plans_updated_at BEFORE UPDATE ON user_plans FOR EACH ROW EXECUTE FUNCTION update_timestamp();
 CREATE TRIGGER tr_cards_updated_at BEFORE UPDATE ON cards FOR EACH ROW EXECUTE FUNCTION update_timestamp();
@@ -1402,6 +1512,46 @@ INSERT INTO tags (name, description, category, is_official) VALUES
     ('Budget', 'Deck com baixo custo', 'budget', true),
     ('Competitive', 'Deck competitivo', 'budget', true),
     ('Casual', 'Deck casual', 'budget', true);
+
+-- Configurações administrativas iniciais
+INSERT INTO admin_settings (setting_key, setting_value, setting_category, description) VALUES
+-- Configurações de modelos ML
+('ml_models_base_path', '"/app/models"', 'ml_models', 'Caminho base para armazenar modelos ML'),
+('ml_models_max_versions_per_type', '10', 'ml_models', 'Número máximo de versões mantidas por tipo de modelo'),
+('ml_models_auto_cleanup', 'true', 'ml_models', 'Limpar automaticamente versões antigas'),
+('ml_models_backup_enabled', 'true', 'ml_models', 'Fazer backup de modelos ativos'),
+('ml_models_default_batch_size', '32', 'ml_models', 'Batch size padrão para inferência'),
+('ml_models_inference_timeout', '30', 'ml_models', 'Timeout em segundos para inferência'),
+
+-- Configurações de exportação de dados  
+('data_export_base_path', '"/app/exports"', 'data_export', 'Caminho base para exportações'),
+('data_export_format', '"parquet"', 'data_export', 'Formato padrão de exportação (parquet, csv)'),
+('data_export_compression', '"snappy"', 'data_export', 'Compressão para arquivos Parquet'),
+('data_export_max_file_size_mb', '100', 'data_export', 'Tamanho máximo de arquivo em MB'),
+('data_export_include_metadata', 'true', 'data_export', 'Incluir metadados nos arquivos exportados'),
+
+-- Configurações de processamento em lote
+('batch_processing_chunk_size', '1000', 'batch_processing', 'Tamanho do chunk para processamento'),
+('batch_processing_max_parallel', '4', 'batch_processing', 'Máximo de processos paralelos'),
+('batch_processing_timeout_minutes', '30', 'batch_processing', 'Timeout para operações em lote'),
+('batch_processing_memory_limit_gb', '8', 'batch_processing', 'Limite de memória por processo'),
+
+-- Configurações gerais do sistema
+('system_environment', '"development"', 'general', 'Ambiente do sistema (development, staging, production)'),
+('logging_level', '"INFO"', 'general', 'Nível de logging (DEBUG, INFO, WARNING, ERROR, CRITICAL)'),
+('feature_flags', '{"model_versioning": true, "auto_export": true, "batch_metrics": true}', 'general', 'Flags de features ativas'),
+('api_rate_limit_per_minute', '60', 'general', 'Limite de requisições por minuto por usuário'),
+('max_concurrent_users', '100', 'general', 'Máximo de usuários simultâneos'),
+
+-- Configurações de segurança
+('security_jwt_expiration_hours', '24', 'security', 'Expiração do token JWT em horas'),
+('security_max_login_attempts', '5', 'security', 'Máximo de tentativas de login'),
+('security_password_min_length', '8', 'security', 'Comprimento mínimo da senha'),
+('security_enable_2fa', 'false', 'security', 'Habilitar autenticação de dois fatores')
+
+ON CONFLICT (setting_key) DO UPDATE SET
+    setting_value = EXCLUDED.setting_value,
+    updated_at = CURRENT_TIMESTAMP;
 
 -- ============================================================================
 -- SEÇÃO 15: PRIVILÉGIOS

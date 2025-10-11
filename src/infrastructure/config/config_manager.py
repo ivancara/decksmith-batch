@@ -3,6 +3,7 @@ Infrastructure Layer - Configuration Manager Implementation
 """
 
 import os
+import json
 from typing import Dict, Any, Optional
 from pathlib import Path
 
@@ -10,10 +11,11 @@ from ...domain.interfaces import IConfigurationManager
 
 
 class EnvironmentConfigManager(IConfigurationManager):
-    """Gerenciador de configurações baseado em variáveis de ambiente"""
+    """Gerenciador de configurações baseado em variáveis de ambiente e admin_settings"""
     
     def __init__(self):
         self._config_cache: Dict[str, Any] = {}
+        self._admin_settings_cache: Dict[str, Any] = {}
         self._load_environment_variables()
     
     def _load_environment_variables(self):
@@ -47,10 +49,18 @@ class EnvironmentConfigManager(IConfigurationManager):
                 self._config_cache[key] = value
     
     def get_config(self, key: str, default: Any = None) -> Any:
-        """Obtém configuração"""
-        value = self._config_cache.get(key, default)
+        """Obtém configuração (prioridade: admin_settings > env > default)"""
+        # Tentar buscar do admin_settings primeiro
+        admin_value = self._admin_settings_cache.get(key)
+        if admin_value is not None:
+            return self._convert_value(admin_value)
         
-        # Tentar converter tipos básicos
+        # Fallback para variáveis de ambiente
+        value = self._config_cache.get(key, default)
+        return self._convert_value(value)
+    
+    def _convert_value(self, value: Any) -> Any:
+        """Converte valor para tipo apropriado"""
         if isinstance(value, str):
             # Booleanos
             if value.lower() in ('true', 'false'):
@@ -66,6 +76,13 @@ class EnvironmentConfigManager(IConfigurationManager):
                     return float(value)
             except ValueError:
                 pass
+            
+            # JSON
+            if value.startswith(('{', '[')):
+                try:
+                    return json.loads(value)
+                except json.JSONDecodeError:
+                    pass
         
         return value
     
@@ -75,6 +92,30 @@ class EnvironmentConfigManager(IConfigurationManager):
             self._config_cache[key] = value
             return True
         except Exception:
+            return False
+    
+    async def load_admin_settings(self, repository=None) -> bool:
+        """Carrega configurações da tabela admin_settings"""
+        if repository is None:
+            return False
+        
+        try:
+            # Buscar todas as configurações ativas
+            settings = await repository.get_all_settings()
+            
+            # Atualizar cache
+            self._admin_settings_cache.clear()
+            for setting in settings:
+                key = setting['setting_key']
+                value = setting['setting_value']
+                # Se for JSONB, já vem como valor deserializado
+                if isinstance(value, str) and value.startswith('"') and value.endswith('"'):
+                    value = value[1:-1]  # Remove aspas duplas para strings
+                self._admin_settings_cache[key] = value
+            
+            return True
+        except Exception as e:
+            print(f"Warning: Could not load admin settings: {e}")
             return False
     
     def get_database_config(self) -> Dict[str, Any]:
@@ -109,13 +150,18 @@ class EnvironmentConfigManager(IConfigurationManager):
             "max_pages_per_session": self.get_config("SCRAPING_MAX_PAGES_PER_SESSION", 1000)
         }
     
-    def get_config(self, key: str, default: Any = None) -> Any:
+    async def get_ml_models_config(self) -> Dict[str, Any]:
         """Obtém configurações de ML"""
         return {
-            "models_directory": self.get_config("ML_MODELS_DIR", "./models"),
+            "models_directory": self.get_config("ml_models_base_path", "./models"),
+            "max_versions": self.get_config("ml_models_max_versions_per_type", 10),
+            "auto_cleanup": self.get_config("ml_models_auto_cleanup", True),
+            "backup_enabled": self.get_config("ml_models_backup_enabled", True),
+            "default_batch_size": self.get_config("ml_models_default_batch_size", 32),
+            "inference_timeout": self.get_config("ml_models_inference_timeout", 30),
             "data_directory": self.get_config("ML_DATA_DIR", "./data"),
             "temp_directory": self.get_config("ML_TEMP_DIR", "./temp"),
-            "default_algorithm": self.get_config("ML_DEFAULT_ALGORITHM", "random_forest"),
+            "default_algorithm": self.get_config("ML_DEFAULT_ALGORITHM", "deep_learning"),
             "training_split": self.get_config("ML_TRAINING_SPLIT", 0.8),
             "validation_split": self.get_config("ML_VALIDATION_SPLIT", 0.2),
             "cross_validation_folds": self.get_config("ML_CV_FOLDS", 5),
@@ -124,25 +170,33 @@ class EnvironmentConfigManager(IConfigurationManager):
             "feature_selection": self.get_config("ML_FEATURE_SELECTION", True),
             "hyperparameter_tuning": self.get_config("ML_HYPERPARAMETER_TUNING", False),
             "model_versioning": self.get_config("ML_MODEL_VERSIONING", True),
-            "backup_models": self.get_config("ML_BACKUP_MODELS", True),
             "metrics_tracking": self.get_config("ML_METRICS_TRACKING", True)
         }
     
     async def get_export_config(self) -> Dict[str, Any]:
         """Obtém configurações de exportação"""
         return {
-            "output_directory": self.get_config("EXPORT_OUTPUT_DIR", "./exports"),
+            "output_directory": self.get_config("data_export_base_path", "./exports"),
+            "default_format": self.get_config("data_export_format", "parquet"),
+            "compression": self.get_config("data_export_compression", "snappy"),
+            "max_file_size_mb": self.get_config("data_export_max_file_size_mb", 100),
+            "include_metadata": self.get_config("data_export_include_metadata", True),
             "temp_directory": self.get_config("EXPORT_TEMP_DIR", "./temp"),
-            "default_format": self.get_config("EXPORT_DEFAULT_FORMAT", "parquet"),
-            "compression": self.get_config("EXPORT_COMPRESSION", "snappy"),
             "batch_size": self.get_config("EXPORT_BATCH_SIZE", 10000),
-            "max_file_size_mb": self.get_config("EXPORT_MAX_FILE_SIZE_MB", 500),
-            "include_metadata": self.get_config("EXPORT_INCLUDE_METADATA", True),
             "partition_by": self.get_config("EXPORT_PARTITION_BY", "formato"),
             "cleanup_temp_files": self.get_config("EXPORT_CLEANUP_TEMP", True),
             "verify_export": self.get_config("EXPORT_VERIFY", True),
             "backup_exports": self.get_config("EXPORT_BACKUP", False),
             "retention_days": self.get_config("EXPORT_RETENTION_DAYS", 30)
+        }
+    
+    async def get_batch_processing_config(self) -> Dict[str, Any]:
+        """Obtém configurações de processamento em lote"""
+        return {
+            "chunk_size": self.get_config("batch_processing_chunk_size", 1000),
+            "max_parallel": self.get_config("batch_processing_max_parallel", 4),
+            "timeout_minutes": self.get_config("batch_processing_timeout_minutes", 30),
+            "memory_limit_gb": self.get_config("batch_processing_memory_limit_gb", 8)
         }
     
     def get_monitoring_config(self) -> Dict[str, Any]:
@@ -153,41 +207,10 @@ class EnvironmentConfigManager(IConfigurationManager):
             "health_check_interval": self.get_config("MONITORING_HEALTH_CHECK_INTERVAL", 300),
             "alert_email": self.get_config("MONITORING_ALERT_EMAIL", ""),
             "webhook_url": self.get_config("MONITORING_WEBHOOK_URL", ""),
-            "log_level": self.get_config("MONITORING_LOG_LEVEL", "INFO"),
+            "log_level": self.get_config("logging_level", "INFO"),
             "performance_tracking": self.get_config("MONITORING_PERFORMANCE_TRACKING", True),
             "error_tracking": self.get_config("MONITORING_ERROR_TRACKING", True),
             "sentry_dsn": self.get_config("MONITORING_SENTRY_DSN", "")
-        }
-    
-    def get_notification_config(self) -> Dict[str, Any]:
-        """Obtém configurações de notificações"""
-        return {
-            "enabled": self.get_config("NOTIFICATIONS_ENABLED", True),
-            "email_enabled": self.get_config("NOTIFICATIONS_EMAIL_ENABLED", False),
-            "webhook_enabled": self.get_config("NOTIFICATIONS_WEBHOOK_ENABLED", False),
-            "slack_enabled": self.get_config("NOTIFICATIONS_SLACK_ENABLED", False),
-            
-            # Email settings
-            "smtp_server": self.get_config("NOTIFICATIONS_SMTP_SERVER", ""),
-            "smtp_port": self.get_config("NOTIFICATIONS_SMTP_PORT", 587),
-            "smtp_username": self.get_config("NOTIFICATIONS_SMTP_USERNAME", ""),
-            "smtp_password": self.get_config("NOTIFICATIONS_SMTP_PASSWORD", ""),
-            "email_from": self.get_config("NOTIFICATIONS_EMAIL_FROM", ""),
-            "email_to": self._parse_list(self.get_config("NOTIFICATIONS_EMAIL_TO", "")),
-            
-            # Webhook settings
-            "webhook_url": self.get_config("NOTIFICATIONS_WEBHOOK_URL", ""),
-            "webhook_secret": self.get_config("NOTIFICATIONS_WEBHOOK_SECRET", ""),
-            
-            # Slack settings
-            "slack_webhook": self.get_config("NOTIFICATIONS_SLACK_WEBHOOK", ""),
-            "slack_channel": self.get_config("NOTIFICATIONS_SLACK_CHANNEL", "#decksmith"),
-            
-            # Notification levels
-            "notify_on_success": self.get_config("NOTIFICATIONS_ON_SUCCESS", True),
-            "notify_on_error": self.get_config("NOTIFICATIONS_ON_ERROR", True),
-            "notify_on_warning": self.get_config("NOTIFICATIONS_ON_WARNING", False),
-            "notify_on_completion": self.get_config("NOTIFICATIONS_ON_COMPLETION", True)
         }
     
     def get_security_config(self) -> Dict[str, Any]:
@@ -197,11 +220,27 @@ class EnvironmentConfigManager(IConfigurationManager):
             "secret_key": self.get_config("DECKSMITH_SECRET_KEY", ""),
             "jwt_secret": self.get_config("DECKSMITH_JWT_SECRET", ""),
             "encryption_key": self.get_config("DECKSMITH_ENCRYPTION_KEY", ""),
+            "jwt_expiration_hours": self.get_config("security_jwt_expiration_hours", 24),
+            "max_login_attempts": self.get_config("security_max_login_attempts", 5),
+            "password_min_length": self.get_config("security_password_min_length", 8),
+            "enable_2fa": self.get_config("security_enable_2fa", False),
             "rate_limit_enabled": self.get_config("SECURITY_RATE_LIMIT_ENABLED", True),
-            "rate_limit_requests": self.get_config("SECURITY_RATE_LIMIT_REQUESTS", 100),
+            "rate_limit_requests": self.get_config("api_rate_limit_per_minute", 60),
             "rate_limit_window": self.get_config("SECURITY_RATE_LIMIT_WINDOW", 3600),
             "ip_whitelist": self._parse_list(self.get_config("SECURITY_IP_WHITELIST", "")),
             "user_agent_verification": self.get_config("SECURITY_USER_AGENT_VERIFICATION", False)
+        }
+    
+    def get_general_config(self) -> Dict[str, Any]:
+        """Obtém configurações gerais"""
+        return {
+            "environment": self.get_config("system_environment", "development"),
+            "max_concurrent_users": self.get_config("max_concurrent_users", 100),
+            "feature_flags": self.get_config("feature_flags", {
+                "model_versioning": True,
+                "auto_export": True,
+                "batch_metrics": True
+            })
         }
     
     def reload_config(self) -> bool:
@@ -221,7 +260,7 @@ class EnvironmentConfigManager(IConfigurationManager):
     
     def get_environment(self) -> str:
         """Obtém ambiente atual"""
-        return self.get_config("ENVIRONMENT", "development")
+        return self.get_config("system_environment", "development")
     
     def is_production(self) -> bool:
         """Verifica se está em produção"""
@@ -237,31 +276,10 @@ class EnvironmentConfigManager(IConfigurationManager):
         safe_config = {}
         sensitive_keys = ['password', 'secret', 'key', 'token', 'webhook']
         
-        for key, value in self._config_cache.items():
+        for key, value in {**self._config_cache, **self._admin_settings_cache}.items():
             if any(sensitive in key.lower() for sensitive in sensitive_keys):
                 safe_config[key] = "***HIDDEN***"
             else:
                 safe_config[key] = value
         
         return safe_config
-    
-    # Métodos async para interface IConfigurationManager
-    async def get_ml_models_config(self) -> Dict[str, Any]:
-        """Obtém configurações de modelos ML (async)"""
-        return {
-            "models_directory": self.get_config("ML_MODELS_DIR", "./models"),
-            "max_versions": self.get_config("ML_MAX_VERSIONS", 10),
-            "tensorflow_version": self.get_config("TF_VERSION", "2.20.0")
-        }
-    
-    async def get_export_config_async(self) -> Dict[str, Any]:
-        """Obtém configurações de exportação (async)"""
-        return await self.get_export_config()
-    
-    async def get_batch_processing_config(self) -> Dict[str, Any]:
-        """Obtém configurações de processamento em lote (async)"""
-        return {
-            "chunk_size": self.get_config("BATCH_CHUNK_SIZE", 1000),
-            "max_parallel": self.get_config("BATCH_MAX_PARALLEL", 4),
-            "timeout_minutes": self.get_config("BATCH_TIMEOUT_MINUTES", 30)
-        }

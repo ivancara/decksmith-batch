@@ -93,6 +93,20 @@ class InMemoryAdminSettingsRepository(IAdminSettingsRepository):
         setting.updated_at = datetime.now()
         self._settings[setting.setting_key] = setting
         return setting
+    
+    async def get_all_settings(self) -> List[Dict[str, Any]]:
+        """Busca todas as configurações ativas"""
+        return [
+            {
+                'setting_key': setting.setting_key,
+                'setting_value': setting.setting_value.get('value', setting.setting_value),
+                'setting_category': setting.setting_category,
+                'description': setting.description,
+                'is_active': setting.is_active
+            }
+            for setting in self._settings.values()
+            if setting.is_active
+        ]
 
 
 class InMemoryModelVersionRepository(IModelVersionRepository):

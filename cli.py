@@ -546,5 +546,197 @@ def health_check():
     })
 
 
+@cli.command('list-settings')
+@click.option('--category', help='Filtrar por categoria específica')
+@click.option('--format', 'output_format', type=click.Choice(['table', 'json']), default='table', help='Formato de saída')
+@handle_async
+async def list_settings(category: Optional[str], output_format: str):
+    """
+    ⚙️ Lista configurações administrativas
+    
+    Exibe todas as configurações do sistema organizadas por categoria.
+    Use --category para filtrar por uma categoria específica.
+    """
+    click.echo("⚙️ Carregando configurações...")
+    
+    # Obter repositório via dependency injection
+    settings_repo = cli_context.container.get_repository('admin_settings')
+    
+    if category:
+        settings = await settings_repo.get_settings_by_category(category)
+        click.echo(f"📋 Configurações da categoria: {category}")
+    else:
+        all_settings = await settings_repo.get_all_settings()
+        settings = [
+            {
+                'setting_key': s['setting_key'],
+                'setting_value': s['setting_value'],
+                'setting_category': s['setting_category'],
+                'description': s['description']
+            }
+            for s in all_settings
+        ]
+        click.echo(f"📋 Todas as configurações ({len(settings)} itens)")
+    
+    if not settings:
+        click.echo("❌ Nenhuma configuração encontrada")
+        return
+    
+    if output_format == 'json':
+        import json
+        click.echo(json.dumps(settings, indent=2, ensure_ascii=False))
+    else:
+        # Agrupar por categoria para exibição em tabela
+        categories = {}
+        for setting in settings:
+            cat = setting.get('setting_category', setting.setting_category if hasattr(setting, 'setting_category') else 'unknown')
+            if cat not in categories:
+                categories[cat] = []
+            
+            value = setting.get('setting_value', setting.setting_value if hasattr(setting, 'setting_value') else 'N/A')
+            # Formatar valor para exibição
+            if isinstance(value, dict):
+                value = str(value.get('value', value))
+            elif isinstance(value, (list, dict)):
+                value = str(value)[:50] + '...' if len(str(value)) > 50 else str(value)
+            
+            categories[cat].append({
+                'Chave': setting.get('setting_key', setting.setting_key if hasattr(setting, 'setting_key') else 'N/A'),
+                'Valor': str(value),
+                'Descrição': setting.get('description', setting.description if hasattr(setting, 'description') else 'N/A')
+            })
+        
+        # Exibir por categoria
+        for cat, cat_settings in categories.items():
+            click.echo(f"\n🏷️  Categoria: {cat.upper()}")
+            click.echo(format_table(cat_settings, ['Chave', 'Valor', 'Descrição']))
+    
+    cli_context.log_operation('list_settings', {
+        'category': category,
+        'format': output_format,
+        'count': len(settings)
+    })
+
+
+@cli.command('get-setting')
+@click.argument('key')
+@handle_async
+async def get_setting(key: str):
+    """
+    🔍 Busca uma configuração específica
+    
+    Exibe detalhes de uma configuração administrativa por chave.
+    """
+    click.echo(f"🔍 Buscando configuração: {key}")
+    
+    # Obter repositório via dependency injection
+    settings_repo = cli_context.container.get_repository('admin_settings')
+    
+    setting = await settings_repo.get_setting(key)
+    
+    if not setting:
+        click.echo(f"❌ Configuração '{key}' não encontrada")
+        return
+    
+    # Exibir detalhes
+    click.echo(f"\n📋 Configuração: {setting.setting_key}")
+    click.echo(f"   Categoria: {setting.setting_category}")
+    click.echo(f"   Valor: {setting.setting_value}")
+    click.echo(f"   Descrição: {setting.description or 'N/A'}")
+    click.echo(f"   Ativa: {'✅ Sim' if setting.is_active else '❌ Não'}")
+    click.echo(f"   Criada em: {setting.created_at.strftime('%d/%m/%Y %H:%M') if setting.created_at else 'N/A'}")
+    click.echo(f"   Atualizada em: {setting.updated_at.strftime('%d/%m/%Y %H:%M') if setting.updated_at else 'N/A'}")
+    click.echo(f"   Criada por: {setting.created_by or 'N/A'}")
+    click.echo(f"   Atualizada por: {setting.updated_by or 'N/A'}")
+    
+    cli_context.log_operation('get_setting', {
+        'key': key,
+        'category': setting.setting_category,
+        'found': True
+    })
+
+
+@cli.command('update-setting')
+@click.argument('key')
+@click.argument('value')
+@click.option('--updated-by', default='cli_user', help='Usuário que está fazendo a alteração')
+@click.option('--force', is_flag=True, help='Força atualização sem confirmação')
+@handle_async
+async def update_setting(key: str, value: str, updated_by: str, force: bool):
+    """
+    ✏️ Atualiza uma configuração administrativa
+    
+    Modifica o valor de uma configuração existente.
+    O valor será parseado automaticamente (JSON, números, strings).
+    """
+    click.echo(f"✏️ Atualizando configuração: {key}")
+    
+    # Obter repositório via dependency injection
+    settings_repo = cli_context.container.get_repository('admin_settings')
+    
+    # Verificar se configuração existe
+    existing = await settings_repo.get_setting(key)
+    if not existing:
+        click.echo(f"❌ Configuração '{key}' não encontrada")
+        return
+    
+    # Parse do valor
+    parsed_value = parse_config_value(value)
+    
+    # Exibir mudança
+    click.echo(f"\n📋 Alteração:")
+    click.echo(f"   Chave: {key}")
+    click.echo(f"   Valor atual: {existing.setting_value}")
+    click.echo(f"   Novo valor: {parsed_value}")
+    click.echo(f"   Tipo: {type(parsed_value).__name__}")
+    
+    # Confirmar mudança
+    if not force:
+        if not click.confirm("\n🤔 Confirma a alteração?"):
+            click.echo("❌ Operação cancelada")
+            return
+    
+    # Atualizar
+    success = await settings_repo.update_setting(key, {'value': parsed_value}, updated_by)
+    
+    if success:
+        click.echo(f"\n✅ Configuração '{key}' atualizada com sucesso!")
+        cli_context.log_operation('update_setting', {
+            'key': key,
+            'old_value': str(existing.setting_value),
+            'new_value': str(parsed_value),
+            'updated_by': updated_by
+        })
+    else:
+        click.echo(f"\n❌ Falha ao atualizar configuração '{key}'")
+
+
+def parse_config_value(value: str) -> Any:
+    """Parse valor de configuração"""
+    import json
+    
+    # Tentar JSON primeiro
+    try:
+        return json.loads(value)
+    except json.JSONDecodeError:
+        pass
+    
+    # Tentar booleano
+    if value.lower() in ('true', 'false'):
+        return value.lower() == 'true'
+    
+    # Tentar número
+    try:
+        if '.' in value:
+            return float(value)
+        else:
+            return int(value)
+    except ValueError:
+        pass
+    
+    # Retornar como string
+    return value
+
+
 if __name__ == '__main__':
     cli()

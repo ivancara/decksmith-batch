@@ -18,8 +18,7 @@ from ...domain.interfaces import (
 from ..persistence.repositories import (
     InMemoryAdminSettingsRepository,
     InMemoryModelVersionRepository,
-    InMemoryDeckRepository,
-    ConfigurationManager
+    InMemoryDeckRepository
 )
 
 from ..services.mock_services import (
@@ -58,8 +57,17 @@ class DependencyContainer:
     
     def _initialize_config_manager(self):
         """Inicializa gerenciador de configuração"""
-        settings_repo = self.get_repository('admin_settings')
-        self._config_manager = ConfigurationManager(settings_repo)
+        from .config_manager import EnvironmentConfigManager
+        self._config_manager = EnvironmentConfigManager()
+        
+        # Carregar configurações do admin_settings se disponível
+        try:
+            settings_repo = self.get_repository('admin_settings')
+            if hasattr(self._config_manager, 'load_admin_settings'):
+                import asyncio
+                asyncio.create_task(self._config_manager.load_admin_settings(settings_repo))
+        except Exception as e:
+            logger.warning(f"Não foi possível carregar admin_settings: {e}")
         
         logger.info("Gerenciador de configuração inicializado")
     
@@ -74,6 +82,10 @@ class DependencyContainer:
     
     def _initialize_factories(self):
         """Inicializa factories"""
+        if self._config_manager is None:
+            logger.error("Config manager não inicializado")
+            return
+            
         # Importação lazy para evitar dependências circulares
         try:
             from ...application.strategies.processing_strategies import StrategyFactory
