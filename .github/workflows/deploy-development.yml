@@ -1,0 +1,176 @@
+name: Deploy to Development
+
+on:
+  push:
+    branches: [ develop ]
+  pull_request:
+    branches: [ develop ]
+
+env:
+  HEROKU_APP_NAME_DEV: decksmith-batch-dev
+  PYTHON_VERSION: "3.11"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: decksmith_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+        cache: 'pip'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    - name: Set environment variables for testing
+      run: |
+        echo "DECKSMITH_ENVIRONMENT=development" >> $GITHUB_ENV
+        echo "DATABASE_HOST=localhost" >> $GITHUB_ENV
+        echo "DATABASE_PORT=5432" >> $GITHUB_ENV
+        echo "DATABASE_NAME=decksmith_test" >> $GITHUB_ENV
+        echo "DATABASE_USER=postgres" >> $GITHUB_ENV
+        echo "DATABASE_PASSWORD=postgres" >> $GITHUB_ENV
+        echo "ML_ENABLE_DEEP_LEARNING=false" >> $GITHUB_ENV
+        echo "ML_USE_GPU=false" >> $GITHUB_ENV
+    
+    - name: Run database setup
+      run: |
+        PGPASSWORD=postgres psql -h localhost -U postgres -d decksmith_test -f database_schema.sql
+    
+    - name: Run linting
+      run: |
+        pip install flake8 black isort mypy
+        black --check .
+        isort --check-only .
+        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+        # mypy src/ --ignore-missing-imports
+    
+    - name: Run tests
+      run: |
+        python -m pytest tests/ -v --cov=src/ --cov-report=xml
+    
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage.xml
+        flags: unittests
+        name: codecov-umbrella
+
+  security-scan:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+    
+    - name: Install security tools
+      run: |
+        python -m pip install --upgrade pip
+        pip install safety bandit
+    
+    - name: Run security checks
+      run: |
+        safety check
+        bandit -r src/ -f json -o bandit-report.json || true
+    
+    - name: Upload security scan results
+      uses: actions/upload-artifact@v3
+      with:
+        name: security-scan-results
+        path: bandit-report.json
+
+  deploy-dev:
+    needs: [test, security-scan]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/develop' && github.event_name == 'push'
+    
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    
+    - name: Deploy to Heroku Development
+      uses: akhileshns/heroku-deploy@v3.12.14
+      with:
+        heroku_api_key: ${{ secrets.HEROKU_API_KEY }}
+        heroku_app_name: ${{ env.HEROKU_APP_NAME_DEV }}
+        heroku_email: ${{ secrets.HEROKU_EMAIL }}
+        usedocker: false
+        
+    - name: Set Heroku environment variables
+      run: |
+        heroku config:set \
+          DECKSMITH_ENVIRONMENT=development \
+          ML_ENABLE_DEEP_LEARNING=true \
+          ML_USE_GPU=false \
+          ML_BATCH_SIZE=32 \
+          ML_EPOCHS=10 \
+          DATABASE_SSL_MODE=require \
+          MONITORING_ENABLED=true \
+          MONITORING_LOG_LEVEL=DEBUG \
+          NOTIFICATIONS_ENABLED=false \
+          SECURITY_RATE_LIMIT_ENABLED=false \
+          --app ${{ env.HEROKU_APP_NAME_DEV }}
+      env:
+        HEROKU_API_KEY: ${{ secrets.HEROKU_API_KEY }}
+    
+    - name: Run database migrations
+      run: |
+        heroku run python -c "
+        import asyncio
+        from src.infrastructure.database.connection import DatabaseConnection
+        from src.infrastructure.config.environment_config import EnvironmentAwareConfigManager
+        
+        async def migrate():
+            config = EnvironmentAwareConfigManager()
+            db = DatabaseConnection(config)
+            await db.initialize()
+            # Run any migration scripts here
+            await db.cleanup()
+        
+        asyncio.run(migrate())
+        " --app ${{ env.HEROKU_APP_NAME_DEV }}
+      env:
+        HEROKU_API_KEY: ${{ secrets.HEROKU_API_KEY }}
+    
+    - name: Health check
+      run: |
+        sleep 30
+        curl -f https://${{ env.HEROKU_APP_NAME_DEV }}.herokuapp.com/health || exit 1
+    
+    - name: Notify deployment
+      if: always()
+      uses: 8398a7/action-slack@v3
+      with:
+        status: ${{ job.status }}
+        channel: '#deployments'
+        text: |
+          Development deployment ${{ job.status }}!
+          Branch: ${{ github.ref }}
+          Commit: ${{ github.sha }}
+          App: https://${{ env.HEROKU_APP_NAME_DEV }}.herokuapp.com
+      env:
+        SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_DEV }}

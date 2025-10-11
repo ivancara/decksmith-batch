@@ -1,0 +1,53 @@
+{
+  "description": "Configuração para ambiente de desenvolvimento",
+  "DATABASE_NAME": "decksmith_dev",
+  "DATABASE_HOST": "localhost",
+  "DATABASE_PORT": 5432,
+  "DATABASE_USER": "decksmith_user",
+  "DATABASE_SSL_MODE": "disable",
+  "DATABASE_POOL_MIN_SIZE": 2,
+  "DATABASE_POOL_MAX_SIZE": 10,
+  
+  "ML_ENABLE_DEEP_LEARNING": true,
+  "ML_USE_GPU": false,
+  "ML_BATCH_SIZE": 32,
+  "ML_EPOCHS": 10,
+  "ML_LEARNING_RATE": 0.001,
+  "ML_MODELS_DIR": "./models_dev",
+  "ML_DATA_DIR": "./data_dev",
+  "ML_TEMP_DIR": "./temp_dev",
+  "ML_GPU_MEMORY_GROWTH": true,
+  "ML_MIXED_PRECISION": false,
+  
+  "API_TIMEOUT": 30,
+  "API_MAX_RETRIES": 3,
+  "API_RATE_LIMIT": 100,
+  "API_BASE_URL": "http://localhost:8000",
+  
+  "MONITORING_ENABLED": true,
+  "MONITORING_LOG_LEVEL": "DEBUG",
+  "MONITORING_METRICS_RETENTION_DAYS": 7,
+  
+  "SCRAPING_CONCURRENT_WORKERS": 2,
+  "SCRAPING_DEFAULT_DELAY": 2.0,
+  "SCRAPING_STEALTH_MODE": false,
+  "SCRAPING_USE_PROXY": false,
+  
+  "NOTIFICATIONS_ENABLED": false,
+  "NOTIFICATIONS_ON_ERROR": true,
+  "NOTIFICATIONS_ON_SUCCESS": false,
+  
+  "SECURITY_RATE_LIMIT_ENABLED": false,
+  "SECURITY_IP_WHITELIST": [],
+  
+  "EXPORT_OUTPUT_DIR": "./exports_dev",
+  "EXPORT_BATCH_SIZE": 1000,
+  "EXPORT_MAX_FILE_SIZE_MB": 100,
+  
+  "comments": {
+    "database": "Banco local para desenvolvimento",
+    "ml": "Configurações otimizadas para desenvolvimento rápido",
+    "monitoring": "Debug habilitado para desenvolvimento",
+    "security": "Segurança relaxada para desenvolvimento"
+  }
+}

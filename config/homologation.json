@@ -1,0 +1,55 @@
+{
+  "description": "Configuração para ambiente de homologação",
+  "DATABASE_NAME": "decksmith_hom",
+  "DATABASE_SSL_MODE": "require",
+  "DATABASE_POOL_MIN_SIZE": 5,
+  "DATABASE_POOL_MAX_SIZE": 15,
+  "DATABASE_COMMAND_TIMEOUT": 90,
+  
+  "ML_ENABLE_DEEP_LEARNING": true,
+  "ML_USE_GPU": false,
+  "ML_BATCH_SIZE": 64,
+  "ML_EPOCHS": 20,
+  "ML_LEARNING_RATE": 0.0005,
+  "ML_MODELS_DIR": "/app/models",
+  "ML_DATA_DIR": "/app/data",
+  "ML_TEMP_DIR": "/app/temp",
+  "ML_GPU_MEMORY_GROWTH": true,
+  "ML_MIXED_PRECISION": true,
+  
+  "API_TIMEOUT": 45,
+  "API_MAX_RETRIES": 5,
+  "API_RATE_LIMIT": 200,
+  "API_BASE_URL": "https://api-hom.decksmith.com",
+  
+  "MONITORING_ENABLED": true,
+  "MONITORING_LOG_LEVEL": "INFO",
+  "MONITORING_METRICS_RETENTION_DAYS": 30,
+  
+  "SCRAPING_CONCURRENT_WORKERS": 4,
+  "SCRAPING_DEFAULT_DELAY": 1.5,
+  "SCRAPING_STEALTH_MODE": true,
+  "SCRAPING_USE_PROXY": false,
+  "SCRAPING_MAX_PAGES_PER_SESSION": 500,
+  
+  "NOTIFICATIONS_ENABLED": true,
+  "NOTIFICATIONS_ON_ERROR": true,
+  "NOTIFICATIONS_ON_SUCCESS": false,
+  "NOTIFICATIONS_ON_COMPLETION": true,
+  
+  "SECURITY_RATE_LIMIT_ENABLED": true,
+  "SECURITY_RATE_LIMIT_REQUESTS": 200,
+  "SECURITY_RATE_LIMIT_WINDOW": 3600,
+  
+  "EXPORT_OUTPUT_DIR": "/app/exports",
+  "EXPORT_BATCH_SIZE": 5000,
+  "EXPORT_MAX_FILE_SIZE_MB": 250,
+  "EXPORT_COMPRESSION": "gzip",
+  
+  "comments": {
+    "database": "Banco Heroku Postgres para homologação",
+    "ml": "Configurações intermediárias para testes",
+    "monitoring": "Monitoramento ativo para testes",
+    "security": "Segurança moderada para homologação"
+  }
+}

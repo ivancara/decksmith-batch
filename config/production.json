@@ -1,0 +1,59 @@
+{
+  "description": "Configuração para ambiente de produção",
+  "DATABASE_SSL_MODE": "require",
+  "DATABASE_POOL_MIN_SIZE": 10,
+  "DATABASE_POOL_MAX_SIZE": 30,
+  "DATABASE_COMMAND_TIMEOUT": 120,
+  
+  "ML_ENABLE_DEEP_LEARNING": true,
+  "ML_USE_GPU": true,
+  "ML_BATCH_SIZE": 128,
+  "ML_EPOCHS": 50,
+  "ML_LEARNING_RATE": 0.0001,
+  "ML_MODELS_DIR": "/app/models",
+  "ML_DATA_DIR": "/app/data",
+  "ML_TEMP_DIR": "/app/temp",
+  "ML_GPU_MEMORY_GROWTH": true,
+  "ML_MIXED_PRECISION": true,
+  
+  "API_TIMEOUT": 60,
+  "API_MAX_RETRIES": 10,
+  "API_RATE_LIMIT": 1000,
+  "API_BASE_URL": "https://api.decksmith.com",
+  
+  "MONITORING_ENABLED": true,
+  "MONITORING_LOG_LEVEL": "WARNING",
+  "MONITORING_METRICS_RETENTION_DAYS": 90,
+  
+  "SCRAPING_CONCURRENT_WORKERS": 8,
+  "SCRAPING_DEFAULT_DELAY": 1.0,
+  "SCRAPING_STEALTH_MODE": true,
+  "SCRAPING_USE_PROXY": true,
+  "SCRAPING_MAX_PAGES_PER_SESSION": 2000,
+  "SCRAPING_ROTATE_HEADERS": true,
+  
+  "NOTIFICATIONS_ENABLED": true,
+  "NOTIFICATIONS_ON_ERROR": true,
+  "NOTIFICATIONS_ON_SUCCESS": false,
+  "NOTIFICATIONS_ON_COMPLETION": true,
+  "NOTIFICATIONS_ON_WARNING": false,
+  
+  "SECURITY_RATE_LIMIT_ENABLED": true,
+  "SECURITY_RATE_LIMIT_REQUESTS": 1000,
+  "SECURITY_RATE_LIMIT_WINDOW": 3600,
+  "SECURITY_USER_AGENT_VERIFICATION": true,
+  
+  "EXPORT_OUTPUT_DIR": "/app/exports",
+  "EXPORT_BATCH_SIZE": 10000,
+  "EXPORT_MAX_FILE_SIZE_MB": 500,
+  "EXPORT_COMPRESSION": "snappy",
+  "EXPORT_BACKUP": true,
+  "EXPORT_RETENTION_DAYS": 90,
+  
+  "comments": {
+    "database": "Banco Heroku Postgres Premium para produção",
+    "ml": "Configurações otimizadas para produção com GPU",
+    "monitoring": "Monitoramento completo com alertas",
+    "security": "Segurança máxima para produção"
+  }
+}

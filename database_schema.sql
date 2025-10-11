@@ -7,15 +7,95 @@
 -- ============================================================================
 -- SEÇÃO 1: LIMPEZA COMPLETA
 -- ============================================================================
+-- Script to safely remove decksmith_user role
+-- ============================================================================
+-- SEÇÃO 1: LIMPEZA COMPLETA
+-- ============================================================================
 
+-- Script to safely remove roles and drop all objects
+DO $$
+BEGIN
+    -- Check and reassign ownership for decksmith_user
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'decksmith_user') THEN
+        REASSIGN OWNED BY decksmith_user TO postgres;
+        DROP OWNED BY decksmith_user CASCADE;
+    END IF;
+    
+    -- Check and reassign ownership for decksmith_read_user
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'decksmith_read_user') THEN
+        REASSIGN OWNED BY decksmith_read_user TO postgres;
+        DROP OWNED BY decksmith_read_user CASCADE;
+    END IF;
+    
+    -- Check and reassign ownership for decksmith_crud_user
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'decksmith_crud_user') THEN
+        REASSIGN OWNED BY decksmith_crud_user TO postgres;
+        DROP OWNED BY decksmith_crud_user CASCADE;
+    END IF;
+END
+$$;
+
+-- Terminate any active connections to the database
 SELECT pg_terminate_backend(pid) 
 FROM pg_stat_activity 
 WHERE datname = 'decksmith' AND pid <> pg_backend_pid();
 
-DROP DATABASE IF EXISTS decksmith;
+-- Drop roles if they exist
 DROP ROLE IF EXISTS decksmith_user;
 DROP ROLE IF EXISTS decksmith_read_user;
 DROP ROLE IF EXISTS decksmith_crud_user;
+
+-- ============================================================================
+-- DROP DE TODAS AS TABELAS, VIEWS, FUNÇÕES E EXTENSÕES
+-- ============================================================================
+
+-- Drop views (ordem importante: views dependentes primeiro)
+DROP VIEW IF EXISTS recent_recommendations CASCADE;
+DROP VIEW IF EXISTS public_decks CASCADE;
+DROP VIEW IF EXISTS card_popularity CASCADE;
+DROP VIEW IF EXISTS decks_with_privacy CASCADE;
+DROP VIEW IF EXISTS users_with_permissions CASCADE;
+
+-- Drop tables (ordem importante: dependentes primeiro)
+DROP TABLE IF EXISTS api_cache CASCADE;
+DROP TABLE IF EXISTS system_logs CASCADE;
+DROP TABLE IF EXISTS user_analytics CASCADE;
+DROP TABLE IF EXISTS card_synergies CASCADE;
+DROP TABLE IF EXISTS recommendations CASCADE;
+DROP TABLE IF EXISTS ml_models CASCADE;
+DROP TABLE IF EXISTS deck_tags CASCADE;
+DROP TABLE IF EXISTS tags CASCADE;
+DROP TABLE IF EXISTS deck_matches CASCADE;
+DROP TABLE IF EXISTS deck_shares CASCADE;
+DROP TABLE IF EXISTS deck_comments CASCADE;
+DROP TABLE IF EXISTS deck_likes CASCADE;
+DROP TABLE IF EXISTS deck_cards CASCADE;
+DROP TABLE IF EXISTS decks CASCADE;
+DROP TABLE IF EXISTS card_legalities CASCADE;
+DROP TABLE IF EXISTS cards CASCADE;
+DROP TABLE IF EXISTS card_sets CASCADE;
+DROP TABLE IF EXISTS game_formats CASCADE;
+DROP TABLE IF EXISTS user_friendships CASCADE;
+DROP TABLE IF EXISTS user_preferences CASCADE;
+DROP TABLE IF EXISTS user_sessions CASCADE;
+DROP TABLE IF EXISTS users CASCADE;
+DROP TABLE IF EXISTS user_plan_permissions CASCADE;
+DROP TABLE IF EXISTS permissions CASCADE;
+DROP TABLE IF EXISTS privacy_levels CASCADE;
+DROP TABLE IF EXISTS user_plans CASCADE;
+
+-- Drop functions
+DROP FUNCTION IF EXISTS user_has_permission(INTEGER, VARCHAR) CASCADE;
+DROP FUNCTION IF EXISTS update_user_counters() CASCADE;
+DROP FUNCTION IF EXISTS update_deck_stats() CASCADE;
+DROP FUNCTION IF EXISTS normalize_text(text) CASCADE;
+DROP FUNCTION IF EXISTS update_timestamp() CASCADE;
+
+-- Drop extensions (apenas se não estão sendo usadas por outros bancos)
+DROP EXTENSION IF EXISTS unaccent CASCADE;
+DROP EXTENSION IF EXISTS pg_trgm CASCADE;
+DROP EXTENSION IF EXISTS "uuid-ossp" CASCADE;
+DROP EXTENSION IF EXISTS plpgsql CASCADE;
 
 -- ============================================================================
 -- SEÇÃO 2: CRIAÇÃO DO BANCO E USUÁRIOS
@@ -30,17 +110,12 @@ CREATE ROLE decksmith_read_user WITH LOGIN NOSUPERUSER INHERIT NOCREATEROLE NOCR
 CREATE ROLE decksmith_crud_user WITH LOGIN NOSUPERUSER INHERIT NOCREATEROLE NOCREATEDB NOREPLICATION 
     CONNECTION LIMIT -1 PASSWORD 'Cr#6fdd3607^7ECF(064d33)4402';
 
-CREATE DATABASE decksmith 
-    WITH OWNER = postgres ENCODING = 'UTF8' TABLESPACE = pg_default CONNECTION LIMIT = -1;
-
-\c decksmith
-
 -- ============================================================================
 -- SEÇÃO 3: EXTENSÕES
 -- ============================================================================
 
 CREATE EXTENSION IF NOT EXISTS plpgsql;
-CREATE EXTENSION IF NOT EXISTS uuid-ossp;
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
 CREATE EXTENSION IF NOT EXISTS unaccent;
 
@@ -61,7 +136,7 @@ RETURNS text AS $$
 BEGIN
     RETURN LOWER(TRIM(unaccent(input_text)));
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql IMMUTABLE;
 
 -- Função para verificar permissões do usuário
 CREATE OR REPLACE FUNCTION user_has_permission(user_id_param INTEGER, permission_name VARCHAR)
@@ -401,51 +476,357 @@ CREATE TABLE deck_tags (
 );
 
 -- ============================================================================
--- SEÇÃO 9: SISTEMA DE RECOMENDAÇÕES
+-- SEÇÃO 9: SISTEMA DE RECOMENDAÇÕES E DEEP LEARNING
 -- ============================================================================
 
--- Modelos de Machine Learning
+-- Modelos de Machine Learning (atualizado para Deep Learning)
 CREATE TABLE ml_models (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     name VARCHAR(100) NOT NULL,
     version VARCHAR(50) NOT NULL,
-    algorithm VARCHAR(50) NOT NULL,
+    algorithm VARCHAR(50) NOT NULL, -- 'deep_learning', 'neural_network', 'transformer', etc.
+    model_type VARCHAR(50) DEFAULT 'classification', -- 'classification', 'regression', 'recommendation'
+    architecture JSONB, -- Arquitetura da rede neural
     status VARCHAR(50) DEFAULT 'training',
     accuracy DECIMAL(5,4),
+    loss DECIMAL(10,6),
+    val_accuracy DECIMAL(5,4),
+    val_loss DECIMAL(10,6),
+    
+    -- Métricas específicas para Deep Learning
+    precision_score DECIMAL(5,4),
+    recall_score DECIMAL(5,4),
+    f1_score DECIMAL(5,4),
+    auc_score DECIMAL(5,4),
+    
+    -- Dados de treinamento
     training_data_size INTEGER,
+    validation_data_size INTEGER,
+    test_data_size INTEGER,
+    training_epochs INTEGER DEFAULT 0,
+    batch_size INTEGER DEFAULT 32,
+    learning_rate DECIMAL(10,8) DEFAULT 0.001,
+    
+    -- Configurações do modelo
     hyperparameters JSONB,
+    optimizer_config JSONB,
+    loss_function VARCHAR(50),
     metrics JSONB,
+    
+    -- Hardware e performance
+    training_time_seconds INTEGER,
+    gpu_used BOOLEAN DEFAULT false,
+    memory_usage_mb INTEGER,
+    model_size_mb DECIMAL(10,2),
+    
+    -- Versionamento e deployment
     is_active BOOLEAN DEFAULT false,
+    is_production BOOLEAN DEFAULT false,
+    model_path TEXT,
+    weights_path TEXT,
+    
+    -- Timestamps
     trained_at TIMESTAMP,
+    deployed_at TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Histórico de treinamento dos modelos
+CREATE TABLE ml_training_history (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    model_id UUID REFERENCES ml_models(id) ON DELETE CASCADE,
+    epoch INTEGER NOT NULL,
+    loss DECIMAL(10,6),
+    accuracy DECIMAL(5,4),
+    val_loss DECIMAL(10,6),
+    val_accuracy DECIMAL(5,4),
+    learning_rate DECIMAL(10,8),
+    batch_size INTEGER,
+    training_time_seconds INTEGER,
+    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    
+    CONSTRAINT ml_training_history_unique UNIQUE (model_id, epoch)
+);
+
+-- Datasets para treinamento
+CREATE TABLE ml_datasets (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name VARCHAR(100) NOT NULL,
+    description TEXT,
+    dataset_type VARCHAR(50) NOT NULL, -- 'card_recommendations', 'deck_analysis', 'price_prediction'
+    version VARCHAR(20) DEFAULT '1.0',
+    
+    -- Estatísticas do dataset
+    total_samples INTEGER NOT NULL,
+    feature_count INTEGER NOT NULL,
+    class_count INTEGER,
+    
+    -- Divisão dos dados
+    train_samples INTEGER,
+    validation_samples INTEGER,
+    test_samples INTEGER,
+    
+    -- Metadados
+    feature_names JSONB,
+    class_names JSONB,
+    data_schema JSONB,
+    preprocessing_steps JSONB,
+    
+    -- Caminhos dos arquivos
+    file_path TEXT,
+    preprocessed_path TEXT,
+    
+    -- Status
+    is_processed BOOLEAN DEFAULT false,
+    is_active BOOLEAN DEFAULT true,
+    
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Features extraídas para ML
+CREATE TABLE ml_features (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    dataset_id UUID REFERENCES ml_datasets(id) ON DELETE CASCADE,
+    feature_name VARCHAR(100) NOT NULL,
+    feature_type VARCHAR(50) NOT NULL, -- 'numerical', 'categorical', 'text', 'embedding'
+    data_type VARCHAR(50) NOT NULL, -- 'float', 'int', 'string', 'boolean'
+    
+    -- Estatísticas da feature
+    importance_score DECIMAL(5,4),
+    correlation_target DECIMAL(5,4),
+    missing_values_count INTEGER DEFAULT 0,
+    unique_values_count INTEGER,
+    
+    -- Para features numéricas
+    min_value DECIMAL(15,6),
+    max_value DECIMAL(15,6),
+    mean_value DECIMAL(15,6),
+    std_deviation DECIMAL(15,6),
+    
+    -- Para features categóricas
+    category_distribution JSONB,
+    
+    -- Transformações aplicadas
+    transformations JSONB,
+    encoding_method VARCHAR(50),
+    
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Histórico de recomendações
+-- Embeddings de cartas para Deep Learning
+CREATE TABLE card_embeddings (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    card_id UUID REFERENCES cards(id) ON DELETE CASCADE,
+    model_id UUID REFERENCES ml_models(id) ON DELETE CASCADE,
+    embedding_vector DECIMAL(8,6)[] NOT NULL, -- Array de valores do embedding
+    embedding_dimension INTEGER NOT NULL,
+    embedding_type VARCHAR(50) DEFAULT 'card2vec', -- 'card2vec', 'transformer', 'autoencoder'
+    
+    -- Metadados do embedding
+    confidence_score DECIMAL(5,4),
+    vector_norm DECIMAL(10,6),
+    
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    
+    CONSTRAINT card_embeddings_unique UNIQUE (card_id, model_id)
+);
+
+-- Embeddings de decks
+CREATE TABLE deck_embeddings (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    deck_id UUID REFERENCES decks(id) ON DELETE CASCADE,
+    model_id UUID REFERENCES ml_models(id) ON DELETE CASCADE,
+    embedding_vector DECIMAL(8,6)[] NOT NULL,
+    embedding_dimension INTEGER NOT NULL,
+    embedding_type VARCHAR(50) DEFAULT 'deck2vec',
+    
+    -- Agregação das cartas
+    aggregation_method VARCHAR(50) DEFAULT 'mean', -- 'mean', 'sum', 'max', 'attention'
+    card_weights JSONB, -- Pesos das cartas na agregação
+    
+    -- Metadados
+    confidence_score DECIMAL(5,4),
+    vector_norm DECIMAL(10,6),
+    cards_count INTEGER,
+    
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    
+    CONSTRAINT deck_embeddings_unique UNIQUE (deck_id, model_id)
+);
+
+-- Histórico de recomendações (atualizado)
 CREATE TABLE recommendations (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
     deck_id UUID REFERENCES decks(id) ON DELETE CASCADE,
     model_id UUID REFERENCES ml_models(id),
-    recommended_cards JSONB NOT NULL,
+    
+    -- Contexto da recomendação
+    recommendation_type VARCHAR(50) DEFAULT 'card_suggestion', -- 'card_suggestion', 'deck_improvement', 'similar_deck'
     request_context JSONB,
-    confidence_score DECIMAL(5,4),
+    
+    -- Resultados
+    recommended_cards JSONB NOT NULL,
+    recommended_decks JSONB,
+    similarity_scores JSONB,
+    confidence_scores JSONB,
+    
+    -- Explicabilidade
+    explanation JSONB, -- Explicação das recomendações
+    feature_importance JSONB,
+    similar_patterns JSONB,
+    
+    -- Feedback e avaliação
     user_feedback INTEGER CHECK (user_feedback BETWEEN 1 AND 5),
+    user_rating DECIMAL(3,2) CHECK (user_rating BETWEEN 0 AND 5),
     cards_added_count INTEGER DEFAULT 0,
+    cards_rejected_count INTEGER DEFAULT 0,
+    
+    -- Performance
     response_time_ms INTEGER,
+    model_inference_time_ms INTEGER,
+    
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Sinergias entre cartas
+-- Sinergias entre cartas (melhorada com ML)
 CREATE TABLE card_synergies (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     card_a_id UUID REFERENCES cards(id) ON DELETE CASCADE,
     card_b_id UUID REFERENCES cards(id) ON DELETE CASCADE,
-    synergy_score DECIMAL(5,4) NOT NULL,
-    synergy_type VARCHAR(50),
-    frequency INTEGER DEFAULT 1,
-    last_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     
-    CONSTRAINT card_synergies_unique UNIQUE (card_a_id, card_b_id)
+    -- Pontuações de sinergia
+    synergy_score DECIMAL(5,4) NOT NULL,
+    ml_predicted_score DECIMAL(5,4), -- Predição do modelo de ML
+    manual_score DECIMAL(5,4), -- Pontuação manual de especialistas
+    
+    -- Tipos de sinergia
+    synergy_type VARCHAR(50), -- 'combo', 'support', 'archetype', 'mana_curve'
+    synergy_category VARCHAR(50), -- 'mechanical', 'thematic', 'statistical'
+    
+    -- Evidências
+    frequency INTEGER DEFAULT 1, -- Quantas vezes apareceram juntas
+    deck_count INTEGER DEFAULT 0, -- Em quantos decks aparecem juntas
+    win_rate_together DECIMAL(5,4), -- Taxa de vitória quando juntas
+    win_rate_separate DECIMAL(5,4), -- Taxa de vitória separadas
+    
+    -- Contexto
+    format_specific JSONB, -- Sinergias específicas por formato
+    archetype_specific JSONB, -- Sinergias específicas por arquétipo
+    
+    -- Metadados ML
+    model_version VARCHAR(50),
+    prediction_confidence DECIMAL(5,4),
+    feature_contributions JSONB,
+    
+    last_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    
+    CONSTRAINT card_synergies_unique UNIQUE (card_a_id, card_b_id),
+    CONSTRAINT card_synergies_no_self CHECK (card_a_id != card_b_id)
+);
+
+-- Análise de meta-game para ML
+CREATE TABLE meta_analysis (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    format_id INTEGER REFERENCES game_formats(id),
+    analysis_date DATE NOT NULL,
+    
+    -- Dados agregados do meta
+    total_decks_analyzed INTEGER NOT NULL,
+    unique_commanders INTEGER,
+    unique_cards INTEGER,
+    avg_deck_price DECIMAL(10,2),
+    avg_cmc DECIMAL(4,2),
+    
+    -- Top cartas e commanders
+    top_cards JSONB, -- Top cartas mais usadas
+    top_commanders JSONB, -- Top commanders
+    emerging_cards JSONB, -- Cartas em ascensão
+    declining_cards JSONB, -- Cartas em declínio
+    
+    -- Análise de arquétipos
+    archetype_distribution JSONB,
+    archetype_performance JSONB,
+    archetype_trends JSONB,
+    
+    -- Predições do modelo
+    meta_predictions JSONB,
+    trend_analysis JSONB,
+    recommendation_adjustments JSONB,
+    
+    -- Metadados
+    model_id UUID REFERENCES ml_models(id),
+    confidence_score DECIMAL(5,4),
+    
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    
+    CONSTRAINT meta_analysis_unique UNIQUE (format_id, analysis_date)
+);
+
+-- Logs de performance dos modelos
+CREATE TABLE ml_model_performance (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    model_id UUID REFERENCES ml_models(id) ON DELETE CASCADE,
+    
+    -- Métricas de performance
+    inference_time_ms INTEGER NOT NULL,
+    memory_usage_mb INTEGER,
+    cpu_usage_percent DECIMAL(5,2),
+    gpu_usage_percent DECIMAL(5,2),
+    
+    -- Dados da requisição
+    input_size INTEGER, -- Tamanho do input
+    output_size INTEGER, -- Tamanho do output
+    batch_size INTEGER DEFAULT 1,
+    
+    -- Contexto
+    endpoint VARCHAR(100), -- Endpoint que fez a requisição
+    user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    request_id UUID,
+    
+    -- Ambiente
+    environment VARCHAR(20), -- 'development', 'homologation', 'production'
+    server_instance VARCHAR(100),
+    
+    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Configurações de modelos por ambiente
+CREATE TABLE ml_model_configs (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    model_id UUID REFERENCES ml_models(id) ON DELETE CASCADE,
+    environment VARCHAR(20) NOT NULL, -- 'development', 'homologation', 'production'
+    
+    -- Configurações específicas
+    batch_size INTEGER DEFAULT 32,
+    max_sequence_length INTEGER,
+    temperature DECIMAL(3,2) DEFAULT 1.0, -- Para modelos generativos
+    top_k INTEGER,
+    top_p DECIMAL(3,2),
+    
+    -- Thresholds
+    confidence_threshold DECIMAL(5,4) DEFAULT 0.5,
+    similarity_threshold DECIMAL(5,4) DEFAULT 0.7,
+    
+    -- Rate limiting
+    max_requests_per_minute INTEGER DEFAULT 60,
+    max_requests_per_hour INTEGER DEFAULT 1000,
+    
+    -- Recursos
+    max_memory_mb INTEGER,
+    timeout_seconds INTEGER DEFAULT 30,
+    
+    -- Status
+    is_active BOOLEAN DEFAULT true,
+    
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    
+    CONSTRAINT ml_model_configs_unique UNIQUE (model_id, environment)
 );
 
 -- ============================================================================
@@ -534,15 +915,57 @@ CREATE INDEX idx_user_friendships_requester ON user_friendships (requester_id);
 CREATE INDEX idx_user_friendships_addressee ON user_friendships (addressee_id);
 CREATE INDEX idx_user_friendships_status ON user_friendships (status);
 
--- Índices para recomendações
+-- Índices para recomendações e ML
+CREATE INDEX idx_ml_models_status ON ml_models (status);
+CREATE INDEX idx_ml_models_is_active ON ml_models (is_active) WHERE is_active = true;
+CREATE INDEX idx_ml_models_is_production ON ml_models (is_production) WHERE is_production = true;
+CREATE INDEX idx_ml_models_algorithm ON ml_models (algorithm);
+CREATE INDEX idx_ml_models_accuracy ON ml_models (accuracy DESC);
+CREATE INDEX idx_ml_models_created_at ON ml_models (created_at DESC);
+
+CREATE INDEX idx_ml_training_history_model_id ON ml_training_history (model_id);
+CREATE INDEX idx_ml_training_history_epoch ON ml_training_history (model_id, epoch);
+
+CREATE INDEX idx_ml_datasets_type ON ml_datasets (dataset_type);
+CREATE INDEX idx_ml_datasets_is_active ON ml_datasets (is_active) WHERE is_active = true;
+CREATE INDEX idx_ml_datasets_is_processed ON ml_datasets (is_processed);
+
+CREATE INDEX idx_ml_features_dataset_id ON ml_features (dataset_id);
+CREATE INDEX idx_ml_features_importance ON ml_features (importance_score DESC);
+CREATE INDEX idx_ml_features_type ON ml_features (feature_type);
+
+CREATE INDEX idx_card_embeddings_card_id ON card_embeddings (card_id);
+CREATE INDEX idx_card_embeddings_model_id ON card_embeddings (model_id);
+CREATE INDEX idx_card_embeddings_type ON card_embeddings (embedding_type);
+
+CREATE INDEX idx_deck_embeddings_deck_id ON deck_embeddings (deck_id);
+CREATE INDEX idx_deck_embeddings_model_id ON deck_embeddings (model_id);
+CREATE INDEX idx_deck_embeddings_type ON deck_embeddings (embedding_type);
+
 CREATE INDEX idx_recommendations_user_id ON recommendations (user_id);
 CREATE INDEX idx_recommendations_deck_id ON recommendations (deck_id);
+CREATE INDEX idx_recommendations_model_id ON recommendations (model_id);
+CREATE INDEX idx_recommendations_type ON recommendations (recommendation_type);
 CREATE INDEX idx_recommendations_created_at ON recommendations (created_at DESC);
+CREATE INDEX idx_recommendations_feedback ON recommendations (user_feedback) WHERE user_feedback IS NOT NULL;
 
--- Índices para sinergias
 CREATE INDEX idx_card_synergies_card_a ON card_synergies (card_a_id);
 CREATE INDEX idx_card_synergies_card_b ON card_synergies (card_b_id);
 CREATE INDEX idx_card_synergies_score ON card_synergies (synergy_score DESC);
+CREATE INDEX idx_card_synergies_ml_score ON card_synergies (ml_predicted_score DESC);
+CREATE INDEX idx_card_synergies_type ON card_synergies (synergy_type);
+CREATE INDEX idx_card_synergies_frequency ON card_synergies (frequency DESC);
+
+CREATE INDEX idx_meta_analysis_format_date ON meta_analysis (format_id, analysis_date DESC);
+CREATE INDEX idx_meta_analysis_model_id ON meta_analysis (model_id);
+
+CREATE INDEX idx_ml_performance_model_id ON ml_model_performance (model_id);
+CREATE INDEX idx_ml_performance_timestamp ON ml_model_performance (timestamp DESC);
+CREATE INDEX idx_ml_performance_environment ON ml_model_performance (environment);
+CREATE INDEX idx_ml_performance_inference_time ON ml_model_performance (inference_time_ms);
+
+CREATE INDEX idx_ml_model_configs_model_env ON ml_model_configs (model_id, environment);
+CREATE INDEX idx_ml_model_configs_active ON ml_model_configs (is_active) WHERE is_active = true;
 
 -- ============================================================================
 -- SEÇÃO 12: TRIGGERS
@@ -765,7 +1188,7 @@ GROUP BY d.id, d.name, d.description, d.user_id, u.name, u.username,
          d.likes_count, d.views_count, d.win_rate, cmd.name, d.created_at, d.updated_at
 ORDER BY d.created_at DESC;
 
--- View para recomendações recentes
+-- View para recomendações recentes (atualizada)
 CREATE VIEW recent_recommendations AS
 SELECT 
     r.id,
@@ -773,15 +1196,108 @@ SELECT
     u.name as user_name,
     r.deck_id,
     d.name as deck_name,
-    r.confidence_score,
+    r.model_id,
+    m.name as model_name,
+    m.algorithm,
+    r.recommendation_type,
+    r.confidence_scores,
     r.user_feedback,
+    r.user_rating,
     r.cards_added_count,
+    r.response_time_ms,
     r.created_at,
-    jsonb_array_length(r.recommended_cards) as cards_recommended
+    jsonb_array_length(r.recommended_cards) as cards_recommended,
+    CASE 
+        WHEN r.user_feedback >= 4 THEN 'positive'
+        WHEN r.user_feedback = 3 THEN 'neutral'
+        WHEN r.user_feedback <= 2 THEN 'negative'
+        ELSE 'no_feedback'
+    END as feedback_category
 FROM recommendations r
 JOIN users u ON r.user_id = u.id
 LEFT JOIN decks d ON r.deck_id = d.id
+LEFT JOIN ml_models m ON r.model_id = m.id
 ORDER BY r.created_at DESC;
+
+-- View para performance dos modelos
+CREATE VIEW ml_model_performance_summary AS
+SELECT 
+    m.id,
+    m.name,
+    m.algorithm,
+    m.model_type,
+    m.status,
+    m.is_active,
+    m.is_production,
+    m.accuracy,
+    m.precision_score,
+    m.recall_score,
+    m.f1_score,
+    m.training_epochs,
+    m.batch_size,
+    m.learning_rate,
+    m.model_size_mb,
+    
+    -- Estatísticas de uso
+    COUNT(r.id) as total_recommendations,
+    AVG(r.response_time_ms) as avg_response_time,
+    AVG(r.user_rating) as avg_user_rating,
+    COUNT(CASE WHEN r.user_feedback >= 4 THEN 1 END) as positive_feedback_count,
+    COUNT(CASE WHEN r.user_feedback <= 2 THEN 1 END) as negative_feedback_count,
+    
+    -- Performance recente
+    AVG(CASE WHEN r.created_at >= NOW() - INTERVAL '7 days' THEN r.response_time_ms END) as recent_avg_response_time,
+    AVG(CASE WHEN r.created_at >= NOW() - INTERVAL '7 days' THEN r.user_rating END) as recent_avg_rating,
+    
+    m.trained_at,
+    m.deployed_at,
+    m.created_at
+
+FROM ml_models m
+LEFT JOIN recommendations r ON m.id = r.model_id
+GROUP BY m.id, m.name, m.algorithm, m.model_type, m.status, m.is_active, m.is_production,
+         m.accuracy, m.precision_score, m.recall_score, m.f1_score, m.training_epochs,
+         m.batch_size, m.learning_rate, m.model_size_mb, m.trained_at, m.deployed_at, m.created_at
+ORDER BY m.is_production DESC, m.is_active DESC, m.accuracy DESC;
+
+-- View para análise de sinergias
+CREATE VIEW card_synergies_analysis AS
+SELECT 
+    cs.id,
+    ca.name as card_a_name,
+    cb.name as card_b_name,
+    ca.type_line as card_a_type,
+    cb.type_line as card_b_type,
+    ca.colors as card_a_colors,
+    cb.colors as card_b_colors,
+    cs.synergy_score,
+    cs.ml_predicted_score,
+    cs.manual_score,
+    cs.synergy_type,
+    cs.synergy_category,
+    cs.frequency,
+    cs.deck_count,
+    cs.win_rate_together,
+    cs.win_rate_separate,
+    
+    -- Diferença de performance
+    (cs.win_rate_together - cs.win_rate_separate) as synergy_impact,
+    
+    -- Confiança na predição
+    cs.prediction_confidence,
+    
+    -- Popularidade das cartas individualmente
+    (SELECT COUNT(*) FROM deck_cards dc WHERE dc.card_id = cs.card_a_id) as card_a_usage,
+    (SELECT COUNT(*) FROM deck_cards dc WHERE dc.card_id = cs.card_b_id) as card_b_usage,
+    
+    cs.last_seen,
+    cs.created_at
+
+FROM card_synergies cs
+JOIN cards ca ON cs.card_a_id = ca.id
+JOIN cards cb ON cs.card_b_id = cb.id
+WHERE cs.synergy_score > 0.3 -- Apenas sinergias significativas
+ORDER BY cs.synergy_score DESC, cs.frequency DESC;
 
 -- ============================================================================
 -- SEÇÃO 14: DADOS INICIAIS
