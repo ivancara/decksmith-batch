@@ -1,13 +1,63 @@
 """
 DeckSmith Batch Processing System
-Domain Layer - Entities
+Domain Layer - Core Entities
+
+Implementação seguindo Domain Driven Design (DDD), SOLID principles e Clean Code.
+Entidades ricas com comportamentos e invariantes bem definidos.
 """
 
 from dataclasses import dataclass, field
-from datetime import datetime
-from typing import List, Optional, Dict, Any
+from typing import List, Dict, Any, Optional, Set
 from uuid import UUID, uuid4
+from datetime import datetime
+from decimal import Decimal
 from enum import Enum
+import logging
+
+
+class CardType(Enum):
+    """Tipos de cartas MTG"""
+    CREATURE = "Creature"
+    INSTANT = "Instant"
+    SORCERY = "Sorcery"
+    ENCHANTMENT = "Enchantment"
+    ARTIFACT = "Artifact"
+    PLANESWALKER = "Planeswalker"
+    LAND = "Land"
+    TRIBAL = "Tribal"
+
+
+class Rarity(Enum):
+    """Raridades das cartas"""
+    COMMON = "common"
+    UNCOMMON = "uncommon"
+    RARE = "rare"
+    MYTHIC = "mythic"
+    SPECIAL = "special"
+
+
+class Color(Enum):
+    """Cores do MTG"""
+    WHITE = "W"
+    BLUE = "U"
+    BLACK = "B"
+    RED = "R"
+    GREEN = "G"
+    COLORLESS = ""
+
+
+class DeckFormat(Enum):
+    """Formatos de deck"""
+    STANDARD = "Standard"
+    MODERN = "Modern"
+    LEGACY = "Legacy"
+    VINTAGE = "Vintage"
+    COMMANDER = "Commander"
+    PIONEER = "Pioneer"
+    HISTORIC = "Historic"
+    ALCHEMY = "Alchemy"
+    PAUPER = "Pauper"
+    BRAWL = "Brawl"
 
 
 class ScrapingStatus(Enum):
@@ -19,586 +69,398 @@ class ScrapingStatus(Enum):
     CANCELLED = "cancelled"
 
 
-class MLModelStatus(Enum):
-    """Status do modelo ML"""
-    TRAINING = "training"
-    COMPLETED = "completed"
-    FAILED = "failed"
-    ACTIVE = "active"
-    ARCHIVED = "archived"
-
-
 @dataclass
 class Card:
-    """Entidade que representa uma carta MTG"""
+    """
+    Entidade Card representa uma carta individual do MTG.
+    Seguindo princípios DDD com invariantes e regras de negócio.
+    """
     id: UUID = field(default_factory=uuid4)
-    nome: str = ""
-    tipo: str = ""
-    custo_mana: str = ""
-    cmc: Optional[int] = None
-    cores: List[str] = field(default_factory=list)
-    raridade: str = ""
-    texto: str = ""
-    poder: Optional[str] = None
-    resistencia: Optional[str] = None
-    edicao: str = ""
-    preco_usd: Optional[float] = None
-    liga_magic_id: Optional[str] = None
-    scryfall_id: Optional[str] = None
-    
-    # Metadados para ML
-    is_creature: bool = False
-    is_spell: bool = False
-    is_artifact: bool = False
-    is_land: bool = False
-    is_planeswalker: bool = False
-    
+    name: str = field(default="")
+    mana_cost: str = field(default="")
+    converted_mana_cost: int = field(default=0)
+    type_line: str = field(default="")
+    card_types: Set[CardType] = field(default_factory=set)
+    oracle_text: str = field(default="")
+    power: Optional[str] = field(default=None)
+    toughness: Optional[str] = field(default=None)
+    loyalty: Optional[str] = field(default=None)
+    colors: Set[Color] = field(default_factory=set)
+    color_identity: Set[Color] = field(default_factory=set)
+    rarity: Optional[Rarity] = field(default=None)
+    set_code: str = field(default="")
+    set_name: str = field(default="")
+    collector_number: str = field(default="")
+    multiverse_id: Optional[int] = field(default=None)
+    scryfall_id: Optional[str] = field(default=None)
+    archidekt_id: Optional[str] = field(default=None)
+    image_uri: Optional[str] = field(default=None)
+    price_usd: Optional[Decimal] = field(default=None)
+    price_eur: Optional[Decimal] = field(default=None)
     created_at: datetime = field(default_factory=datetime.now)
     updated_at: datetime = field(default_factory=datetime.now)
     
     def __post_init__(self):
-        """Processa dados após inicialização"""
-        self._categorize_card_type()
-        self._normalize_colors()
+        """Validações após inicialização"""
+        self._validate_invariants()
     
-    def _categorize_card_type(self):
-        """Categoriza o tipo da carta para features ML"""
-        tipo_lower = self.tipo.lower()
-        self.is_creature = "creature" in tipo_lower or "criatura" in tipo_lower
-        self.is_spell = any(t in tipo_lower for t in ["instant", "sorcery", "instantaneo", "feitico"])
-        self.is_artifact = "artifact" in tipo_lower or "artefato" in tipo_lower
-        self.is_land = "land" in tipo_lower or "terra" in tipo_lower
-        self.is_planeswalker = "planeswalker" in tipo_lower
-    
-    def _normalize_colors(self):
-        """Normaliza as cores para padrão"""
-        color_map = {
-            "white": "W", "branco": "W",
-            "blue": "U", "azul": "U", 
-            "black": "B", "preto": "B",
-            "red": "R", "vermelho": "R",
-            "green": "G", "verde": "G"
-        }
+    def _validate_invariants(self):
+        """Valida invariantes da entidade"""
+        if not self.name or not self.name.strip():
+            raise ValueError("Card name cannot be empty")
         
-        normalized = []
-        for cor in self.cores:
-            normalized.append(color_map.get(cor.lower(), cor))
-        self.cores = sorted(list(set(normalized)))
-    
-    def get_color_identity(self) -> str:
-        """Retorna identidade de cor como string"""
-        return "".join(sorted(self.cores)) if self.cores else "C"
-    
-    def to_ml_features(self) -> Dict[str, Any]:
-        """Converte carta para features ML"""
-        return {
-            "cmc": self.cmc or 0,
-            "color_count": len(self.cores),
-            "color_identity": self.get_color_identity(),
-            "is_creature": self.is_creature,
-            "is_spell": self.is_spell,
-            "is_artifact": self.is_artifact,
-            "is_land": self.is_land,
-            "is_planeswalker": self.is_planeswalker,
-            "rarity": self.raridade.lower(),
-            "has_power": self.poder is not None,
-            "has_toughness": self.resistencia is not None,
-            "text_length": len(self.texto) if self.texto else 0,
-            "price_usd": self.preco_usd or 0.0
-        }
+        if self.converted_mana_cost < 0:
+            raise ValueError("Converted mana cost cannot be negative")
+        
+        # Normalizar nome
+        self.name = self.name.strip()
     
     @classmethod
-    def create_from_scraping(
+    def create_from_archidekt(
         cls,
-        nome: str,
-        custo_mana: str,
-        tipo: str,
-        texto: str,
-        cores: List[str],
-        raridade: str,
+        name: str,
+        mana_cost: str = "",
+        type_line: str = "",
+        oracle_text: str = "",
+        power: Optional[str] = None,
+        toughness: Optional[str] = None,
+        colors: Optional[List[str]] = None,
+        rarity: Optional[str] = None,
+        set_code: str = "",
+        archidekt_id: Optional[str] = None,
         **kwargs
-    ) -> "Card":
-        """Cria carta a partir de dados de scraping"""
-        # Calcular CMC a partir do custo de mana
-        cmc = cls._calculate_cmc_from_mana_cost(custo_mana)
+    ) -> 'Card':
+        """Factory method para criar carta a partir de dados do Archidekt"""
+        
+        # Converter cores
+        color_set = set()
+        if colors:
+            for color in colors:
+                try:
+                    color_set.add(Color(color.upper()))
+                except ValueError:
+                    pass  # Ignorar cores inválidas
+        
+        # Converter raridade
+        rarity_enum = None
+        if rarity:
+            try:
+                rarity_enum = Rarity(rarity.lower())
+            except ValueError:
+                pass
+        
+        # Calcular CMC a partir do mana cost
+        cmc = cls._calculate_cmc(mana_cost)
+        
+        # Extrair tipos de carta
+        card_types = cls._extract_card_types(type_line)
         
         return cls(
-            nome=nome,
-            custo_mana=custo_mana,
-            cmc=cmc,
-            tipo=tipo,
-            texto=texto,
-            cores=cores,
-            raridade=raridade,
+            name=name,
+            mana_cost=mana_cost,
+            converted_mana_cost=cmc,
+            type_line=type_line,
+            card_types=card_types,
+            oracle_text=oracle_text,
+            power=power,
+            toughness=toughness,
+            colors=color_set,
+            color_identity=color_set,  # Simplificação
+            rarity=rarity_enum,
+            set_code=set_code,
+            archidekt_id=archidekt_id,
             **kwargs
         )
     
     @staticmethod
-    def _calculate_cmc_from_mana_cost(custo_mana: str) -> int:
-        """Calcula CMC a partir do custo de mana"""
-        if not custo_mana:
+    def _calculate_cmc(mana_cost: str) -> int:
+        """Calcula Converted Mana Cost a partir do mana cost"""
+        if not mana_cost:
             return 0
         
-        # Lógica simplificada - pode ser expandida
         import re
+        # Extrair números do mana cost
+        numbers = re.findall(r'\d+', mana_cost)
+        total = sum(int(num) for num in numbers)
         
-        # Extrair números do custo
-        numbers = re.findall(r'\d+', custo_mana)
-        generic_cost = sum(int(num) for num in numbers)
+        # Contar símbolos de mana (não números)
+        symbols = re.findall(r'\{[WUBRG]\}', mana_cost)
+        total += len(symbols)
         
-        # Contar símbolos de mana colorido
-        colored_symbols = len(re.findall(r'[WUBRG]', custo_mana))
+        return total
+    
+    @staticmethod
+    def _extract_card_types(type_line: str) -> Set[CardType]:
+        """Extrai tipos de carta da type line"""
+        types = set()
+        if not type_line:
+            return types
         
-        return generic_cost + colored_symbols
+        type_line_upper = type_line.upper()
+        for card_type in CardType:
+            if card_type.value.upper() in type_line_upper:
+                types.add(card_type)
+        
+        return types
+    
+    def is_creature(self) -> bool:
+        """Verifica se é criatura"""
+        return CardType.CREATURE in self.card_types
+    
+    def is_spell(self) -> bool:
+        """Verifica se é mágica"""
+        return any(t in self.card_types for t in [
+            CardType.INSTANT, CardType.SORCERY
+        ])
+    
+    def is_permanent(self) -> bool:
+        """Verifica se é permanente"""
+        return any(t in self.card_types for t in [
+            CardType.CREATURE, CardType.ENCHANTMENT, CardType.ARTIFACT,
+            CardType.PLANESWALKER, CardType.LAND
+        ])
+    
+    def get_color_identity_string(self) -> str:
+        """Retorna identidade de cor como string"""
+        return "".join(sorted(color.value for color in self.color_identity))
+    
+    def update_price(self, price_usd: Optional[Decimal] = None, price_eur: Optional[Decimal] = None):
+        """Atualiza preços da carta"""
+        if price_usd is not None:
+            self.price_usd = price_usd
+        if price_eur is not None:
+            self.price_eur = price_eur
+        self.updated_at = datetime.now()
+
+
+@dataclass
+class DeckCard:
+    """
+    Representa uma carta em um deck com quantidade e categoria.
+    Value Object para o relacionamento Deck-Card.
+    """
+    card_id: UUID
+    quantity: int
+    category: str = "main"  # main, sideboard, commander, companion
+    
+    def __post_init__(self):
+        if self.quantity <= 0:
+            raise ValueError("Card quantity must be positive")
+        
+        if self.category not in ["main", "sideboard", "commander", "companion"]:
+            raise ValueError(f"Invalid category: {self.category}")
 
 
 @dataclass
 class Deck:
-    """Entidade que representa um deck MTG"""
+    """
+    Entidade Deck representa um deck completo de MTG.
+    Agregado root que gerencia cartas e suas quantidades.
+    """
     id: UUID = field(default_factory=uuid4)
-    nome: str = ""
-    formato: str = "Commander"
-    comandante: Optional[str] = None
-    cores: List[str] = field(default_factory=list)
-    cartas: List[Dict[str, Any]] = field(default_factory=list)  # {carta_id, quantidade}
-    dono: str = ""
-    
-    # Estatísticas calculadas
-    total_cartas: int = 0
-    custo_medio_mana: float = 0.0
-    curva_mana: Dict[int, int] = field(default_factory=dict)
-    distribuicao_tipos: Dict[str, int] = field(default_factory=dict)
-    
-    # Metadados
-    liga_magic_id: Optional[str] = None
-    is_competitive: bool = False
-    tags: List[str] = field(default_factory=list)
-    
+    name: str = field(default="")
+    description: str = field(default="")
+    format: Optional[DeckFormat] = field(default=None)
+    archidekt_id: Optional[str] = field(default=None)
+    archidekt_url: Optional[str] = field(default=None)
+    owner_name: Optional[str] = field(default=None)
+    cards: List[DeckCard] = field(default_factory=list)
+    tags: Set[str] = field(default_factory=set)
+    is_public: bool = field(default=True)
+    is_featured: bool = field(default=False)
+    view_count: int = field(default=0)
+    like_count: int = field(default=0)
+    total_cards: int = field(default=0)
+    main_deck_size: int = field(default=0)
+    sideboard_size: int = field(default=0)
+    average_cmc: Optional[Decimal] = field(default=None)
+    estimated_price_usd: Optional[Decimal] = field(default=None)
+    color_identity: Set[Color] = field(default_factory=set)
     created_at: datetime = field(default_factory=datetime.now)
     updated_at: datetime = field(default_factory=datetime.now)
+    scraped_at: datetime = field(default_factory=datetime.now)
     
-    def add_card(self, card_id: UUID, quantidade: int = 1):
+    def __post_init__(self):
+        """Validações após inicialização"""
+        self._validate_invariants()
+    
+    def _validate_invariants(self):
+        """Valida invariantes da entidade"""
+        if not self.name or not self.name.strip():
+            raise ValueError("Deck name cannot be empty")
+        
+        self.name = self.name.strip()
+    
+    @classmethod
+    def create_from_archidekt(
+        cls,
+        name: str,
+        archidekt_id: str,
+        archidekt_url: str,
+        format: Optional[str] = None,
+        description: str = "",
+        owner_name: Optional[str] = None,
+        is_public: bool = True,
+        **kwargs
+    ) -> 'Deck':
+        """Factory method para criar deck a partir de dados do Archidekt"""
+        
+        # Converter formato
+        format_enum = None
+        if format:
+            try:
+                format_enum = DeckFormat(format)
+            except ValueError:
+                # Tentar encontrar formato similar
+                format_upper = format.upper()
+                for deck_format in DeckFormat:
+                    if deck_format.value.upper() == format_upper:
+                        format_enum = deck_format
+                        break
+        
+        return cls(
+            name=name,
+            archidekt_id=archidekt_id,
+            archidekt_url=archidekt_url,
+            format=format_enum,
+            description=description,
+            owner_name=owner_name,
+            is_public=is_public,
+            **kwargs
+        )
+    
+    def add_card(self, card_id: UUID, quantity: int, category: str = "main"):
         """Adiciona carta ao deck"""
         # Verificar se carta já existe
-        for carta in self.cartas:
-            if carta["carta_id"] == card_id:
-                carta["quantidade"] += quantidade
+        for existing_card in self.cards:
+            if existing_card.card_id == card_id and existing_card.category == category:
+                existing_card.quantity += quantity
+                self._update_statistics()
                 return
         
         # Adicionar nova carta
-        self.cartas.append({
-            "carta_id": card_id,
-            "quantidade": quantidade
-        })
-        self._recalculate_stats()
+        deck_card = DeckCard(card_id=card_id, quantity=quantity, category=category)
+        self.cards.append(deck_card)
+        self._update_statistics()
     
-    def _recalculate_stats(self):
-        """Recalcula estatísticas do deck"""
-        self.total_cartas = sum(carta["quantidade"] for carta in self.cartas)
+    def remove_card(self, card_id: UUID, category: str = "main"):
+        """Remove carta do deck"""
+        self.cards = [
+            card for card in self.cards 
+            if not (card.card_id == card_id and card.category == category)
+        ]
+        self._update_statistics()
+    
+    def update_card_quantity(self, card_id: UUID, new_quantity: int, category: str = "main"):
+        """Atualiza quantidade de uma carta"""
+        for card in self.cards:
+            if card.card_id == card_id and card.category == category:
+                if new_quantity <= 0:
+                    self.remove_card(card_id, category)
+                else:
+                    card.quantity = new_quantity
+                    self._update_statistics()
+                return
+        
+        # Se não encontrou, adicionar
+        if new_quantity > 0:
+            self.add_card(card_id, new_quantity, category)
+    
+    def get_main_deck_cards(self) -> List[DeckCard]:
+        """Retorna cartas do deck principal"""
+        return [card for card in self.cards if card.category == "main"]
+    
+    def get_sideboard_cards(self) -> List[DeckCard]:
+        """Retorna cartas do sideboard"""
+        return [card for card in self.cards if card.category == "sideboard"]
+    
+    def get_commander_cards(self) -> List[DeckCard]:
+        """Retorna comandantes"""
+        return [card for card in self.cards if card.category == "commander"]
+    
+    def _update_statistics(self):
+        """Atualiza estatísticas do deck"""
+        main_cards = self.get_main_deck_cards()
+        sideboard_cards = self.get_sideboard_cards()
+        
+        self.main_deck_size = sum(card.quantity for card in main_cards)
+        self.sideboard_size = sum(card.quantity for card in sideboard_cards)
+        self.total_cards = self.main_deck_size + self.sideboard_size
+        
         self.updated_at = datetime.now()
     
-    def get_card_names_list(self) -> List[str]:
-        """Retorna lista de nomes de cartas para ML"""
-        # Esta função seria implementada com acesso ao repositório
-        # Por agora retorna placeholder
-        return [f"carta_{carta['carta_id']}" for carta in self.cartas]
+    def is_legal_in_format(self) -> bool:
+        """Verifica se o deck é legal no formato especificado"""
+        if not self.format:
+            return True
+        
+        # Implementar regras específicas de formato
+        if self.format == DeckFormat.COMMANDER:
+            return self.main_deck_size == 100 and len(self.get_commander_cards()) == 1
+        elif self.format in [DeckFormat.STANDARD, DeckFormat.MODERN, DeckFormat.PIONEER]:
+            return 60 <= self.main_deck_size <= 100 and self.sideboard_size <= 15
+        
+        return True
     
-    def to_ml_dataset_row(self, card_repository) -> Dict[str, Any]:
-        """Converte deck para row do dataset ML"""
-        card_names = []
-        card_features = []
-        
-        for deck_card in self.cartas:
-            card = card_repository.find_by_id(deck_card["carta_id"])
-            if card:
-                card_names.extend([card.nome] * deck_card["quantidade"])
-                card_features.append(card.to_ml_features())
-        
-        return {
-            "deck_id": str(self.id),
-            "formato": self.formato,
-            "cores": ",".join(sorted(self.cores)),
-            "total_cartas": self.total_cartas,
-            "custo_medio_mana": self.custo_medio_mana,
-            "card_names": card_names,
-            "is_competitive": self.is_competitive
-        }
+    def add_tag(self, tag: str):
+        """Adiciona tag ao deck"""
+        if tag and tag.strip():
+            self.tags.add(tag.strip().lower())
+            self.updated_at = datetime.now()
     
-    @classmethod
-    def create_from_scraping(
-        cls,
-        nome: str,
-        formato: str,
-        cartas_data: List[Any],
-        comandante: Optional[str] = None,
-        source_url: Optional[str] = None,
-        **kwargs
-    ) -> "Deck":
-        """Cria deck a partir de dados de scraping"""
-        deck = cls(
-            nome=nome,
-            formato=formato,
-            comandante=comandante,
-            **kwargs
-        )
-        
-        # Processar cartas
-        for carta_data in cartas_data:
-            if hasattr(carta_data, 'id'):
-                deck.add_card(carta_data.id, carta_data.get("quantidade", 1))
-        
-        # Calcular estatísticas básicas
-        deck._calculate_basic_stats()
-        
-        return deck
-    
-    def _calculate_basic_stats(self):
-        """Calcula estatísticas básicas do deck"""
-        self.total_cartas = sum(carta["quantidade"] for carta in self.cartas)
-        # Mais estatísticas podem ser calculadas aqui
-    
-    def add_analysis_data(self, analysis: Dict[str, Any]):
-        """Adiciona dados de análise ao deck"""
-        if "competitive_score" in analysis:
-            self.is_competitive = analysis["competitive_score"] > 0.7
-        
-        # Adicionar outras análises como tags
-        if "mana_curve_quality" in analysis:
-            quality = analysis["mana_curve_quality"]
-            if isinstance(quality, dict) and quality.get("quality_score", 0) > 0.8:
-                self.tags.append("good_mana_curve")
+    def remove_tag(self, tag: str):
+        """Remove tag do deck"""
+        self.tags.discard(tag.lower())
+        self.updated_at = datetime.now()
 
 
-@dataclass 
+@dataclass
 class ScrapingSession:
-    """Entidade que representa uma sessão de scraping"""
+    """
+    Entidade para rastrear sessões de scraping.
+    """
     id: UUID = field(default_factory=uuid4)
-    fonte: str = "ligamagic"
-    status: ScrapingStatus = ScrapingStatus.PENDING
-    
-    # Parâmetros
-    total_pages: int = 0
-    current_page: int = 0
-    delay_seconds: float = 1.0
-    concurrent_workers: int = 4
-    
-    # Progresso
-    decks_found: int = 0
-    decks_processed: int = 0
-    cards_found: int = 0
-    cards_processed: int = 0
-    errors_count: int = 0
-    
-    # Timing
-    started_at: Optional[datetime] = None
-    completed_at: Optional[datetime] = None
-    estimated_completion: Optional[datetime] = None
-    
-    # Logs e erros
-    error_message: Optional[str] = None
-    log_entries: List[str] = field(default_factory=list)
-    
-    created_at: datetime = field(default_factory=datetime.now)
+    source: str = field(default="archidekt")
+    start_time: datetime = field(default_factory=datetime.now)
+    end_time: Optional[datetime] = field(default=None)
+    status: ScrapingStatus = field(default=ScrapingStatus.PENDING)
+    pages_scraped: int = field(default=0)
+    decks_found: int = field(default=0)
+    decks_saved: int = field(default=0)
+    cards_found: int = field(default=0)
+    cards_saved: int = field(default=0)
+    errors: List[str] = field(default_factory=list)
+    configuration: Dict[str, Any] = field(default_factory=dict)
     
     def start(self):
-        """Inicia a sessão de scraping"""
+        """Inicia a sessão"""
         self.status = ScrapingStatus.RUNNING
-        self.started_at = datetime.now()
+        self.start_time = datetime.now()
     
-    def complete(self):
-        """Completa a sessão de scraping"""
+    def mark_completed(self):
+        """Marca sessão como concluída"""
         self.status = ScrapingStatus.COMPLETED
-        self.completed_at = datetime.now()
+        self.end_time = datetime.now()
     
-    def fail(self, error_message: str):
+    def mark_failed(self, error_message: str):
         """Marca sessão como falha"""
         self.status = ScrapingStatus.FAILED
-        self.error_message = error_message
-        self.completed_at = datetime.now()
+        self.end_time = datetime.now()
+        self.errors.append(error_message)
     
-    def add_log(self, message: str):
-        """Adiciona entrada de log"""
-        timestamp = datetime.now().isoformat()
-        self.log_entries.append(f"[{timestamp}] {message}")
+    def add_error(self, error_message: str):
+        """Adiciona erro à sessão"""
+        self.errors.append(error_message)
+        logging.getLogger(__name__).error(f"Scraping error: {error_message}")
     
-    def get_progress_percentage(self) -> float:
-        """Retorna progresso em porcentagem"""
-        if self.total_pages == 0:
-            return 0.0
-        return (self.current_page / self.total_pages) * 100
+    def get_duration_seconds(self) -> Optional[float]:
+        """Retorna duração da sessão em segundos"""
+        if not self.end_time:
+            return None
+        return (self.end_time - self.start_time).total_seconds()
     
-    @classmethod
-    def create_new(
-        cls,
-        request_type: str,
-        target_formats: List[str],
-        max_pages: Optional[int] = None,
-        configuration: Optional[Dict[str, Any]] = None
-    ) -> "ScrapingSession":
-        """Cria nova sessão de scraping"""
-        config = configuration or {}
-        
-        session = cls(
-            total_pages=max_pages or 0,
-            delay_seconds=config.get("delay_seconds", 1.0),
-            concurrent_workers=config.get("concurrent_workers", 4)
-        )
-        
-        session.add_log(f"Sessão criada - Tipo: {request_type}, Formatos: {target_formats}")
-        
-        return session
-    
-    def complete_successfully(self, total_pages: int, total_decks: int, total_cards: int):
-        """Completa sessão com sucesso"""
-        self.status = ScrapingStatus.COMPLETED
-        self.completed_at = datetime.now()
-        self.total_pages = total_pages
-        self.decks_found = total_decks
-        self.cards_found = total_cards
-        self.add_log("Sessão completada com sucesso")
-    
-    def mark_as_failed(self, error_message: str):
-        """Marca sessão como falha"""
-        self.status = ScrapingStatus.FAILED
-        self.error_message = error_message
-        self.completed_at = datetime.now()
-        self.add_log(f"Sessão falhou: {error_message}")
-    
-    @property
-    def start_time(self) -> datetime:
-        """Retorna tempo de início"""
-        return self.started_at or self.created_at
-    
-    @property
-    def end_time(self) -> Optional[datetime]:
-        """Retorna tempo de fim"""
-        return self.completed_at
-    
-    @property
-    def duration_seconds(self) -> Optional[float]:
-        """Retorna duração em segundos"""
-        if self.completed_at and self.started_at:
-            return (self.completed_at - self.started_at).total_seconds()
-        return None
-
-
-@dataclass
-class MLModel:
-    """Entidade que representa um modelo ML treinado"""
-    id: UUID = field(default_factory=uuid4)
-    nome: str = ""
-    versao: str = "1.0.0"
-    algoritmo: str = "deep_learning"
-    status: MLModelStatus = MLModelStatus.TRAINING
-    
-    # Configuração do treinamento
-    hiperparametros: Dict[str, Any] = field(default_factory=dict)
-    dataset_info: Dict[str, Any] = field(default_factory=dict)
-    
-    # Métricas de performance
-    accuracy: Optional[float] = None
-    precision: Optional[float] = None
-    recall: Optional[float] = None
-    f1_score: Optional[float] = None
-    loss: Optional[float] = None
-    
-    # Arquivos
-    model_file_path: Optional[str] = None
-    preprocessor_path: Optional[str] = None
-    metadata_path: Optional[str] = None
-    
-    # Timing
-    training_started_at: Optional[datetime] = None
-    training_completed_at: Optional[datetime] = None
-    training_duration_seconds: Optional[int] = None
-    
-    # Metadados
-    created_by: str = "batch_system"
-    is_active: bool = False
-    created_at: datetime = field(default_factory=datetime.now)
-    
-    def start_training(self):
-        """Inicia treinamento do modelo"""
-        self.status = MLModelStatus.TRAINING
-        self.training_started_at = datetime.now()
-    
-    def complete_training(self, metrics: Dict[str, float]):
-        """Completa treinamento com métricas"""
-        self.status = MLModelStatus.COMPLETED
-        self.training_completed_at = datetime.now()
-        
-        if self.training_started_at:
-            duration = self.training_completed_at - self.training_started_at
-            self.training_duration_seconds = int(duration.total_seconds())
-        
-        # Atualizar métricas
-        self.accuracy = metrics.get("accuracy")
-        self.precision = metrics.get("precision")
-        self.recall = metrics.get("recall")
-        self.f1_score = metrics.get("f1_score")
-        self.loss = metrics.get("loss")
-    
-    def fail_training(self, error_message: str):
-        """Marca treinamento como falha"""
-        self.status = MLModelStatus.FAILED
-        self.training_completed_at = datetime.now()
-    
-    def activate(self):
-        """Ativa modelo para uso em produção"""
-        self.is_active = True
-        self.status = MLModelStatus.ACTIVE
-    
-    def get_performance_summary(self) -> Dict[str, Any]:
-        """Retorna resumo da performance"""
-        return {
-            "accuracy": self.accuracy,
-            "precision": self.precision,
-            "recall": self.recall,
-            "f1_score": self.f1_score,
-            "loss": self.loss,
-            "training_duration_hours": (
-                self.training_duration_seconds / 3600 
-                if self.training_duration_seconds else None
-            )
-        }
-    
-    @classmethod
-    def create_new(
-        cls,
-        algorithm: str,
-        hyperparameters: Dict[str, Any],
-        target_formats: Optional[List[str]] = None,
-        name: Optional[str] = None
-    ) -> "MLModel":
-        """Cria novo modelo ML"""
-        model_name = name or f"model_{algorithm}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-        
-        return cls(
-            nome=model_name,
-            algoritmo=algorithm,
-            hiperparametros=hyperparameters.copy(),
-            dataset_info={
-                "target_formats": target_formats or [],
-                "created_at": datetime.now().isoformat()
-            }
-        )
-    
-    def start_training(self):
-        """Inicia treinamento do modelo"""
-        self.status = MLModelStatus.TRAINING
-        self.training_started_at = datetime.now()
-    
-    def complete_training(
-        self,
-        accuracy: Optional[float] = None,
-        precision: Optional[float] = None,
-        recall: Optional[float] = None,
-        f1_score: Optional[float] = None,
-        loss: Optional[float] = None
-    ):
-        """Completa treinamento com métricas"""
-        self.status = MLModelStatus.COMPLETED
-        self.training_completed_at = datetime.now()
-        
-        if self.training_started_at:
-            duration = self.training_completed_at - self.training_started_at
-            self.training_duration_seconds = int(duration.total_seconds())
-        
-        # Atualizar métricas
-        self.accuracy = accuracy
-        self.precision = precision
-        self.recall = recall
-        self.f1_score = f1_score
-        self.loss = loss
-    
-    def mark_as_failed(self, error_message: str):
-        """Marca treinamento como falha"""
-        self.status = MLModelStatus.FAILED
-        self.training_completed_at = datetime.now()
-    
-    def mark_as_production_ready(self):
-        """Marca modelo como pronto para produção"""
-        self.is_active = True
-        self.status = MLModelStatus.ACTIVE
-
-
-@dataclass
-class DataExportJob:
-    """Entidade que representa um job de exportação de dados"""
-    id: UUID = field(default_factory=uuid4)
-    export_type: str = "parquet"  # parquet, csv, json
-    format_config: Dict[str, Any] = field(default_factory=dict)
-    
-    # Filtros
-    date_from: Optional[datetime] = None
-    date_to: Optional[datetime] = None
-    formatos: List[str] = field(default_factory=list)
-    include_competitive_only: bool = False
-    
-    # Status
-    status: str = "pending"  # pending, running, completed, failed
-    records_processed: int = 0
-    total_records: int = 0
-    
-    # Output
-    output_file_path: Optional[str] = None
-    file_size_mb: Optional[float] = None
-    
-    # Timing
-    started_at: Optional[datetime] = None
-    completed_at: Optional[datetime] = None
-    
-    created_at: datetime = field(default_factory=datetime.now)
-    
-    def start(self):
-        """Inicia job de exportação"""
-        self.status = "running"
-        self.started_at = datetime.now()
-    
-    def complete(self, output_path: str, file_size_mb: float):
-        """Completa exportação"""
-        self.status = "completed"
-        self.completed_at = datetime.now()
-        self.output_file_path = output_path
-        self.file_size_mb = file_size_mb
-    
-    def fail(self, error_message: str):
-        """Marca exportação como falha"""
-        self.status = "failed"
-        self.completed_at = datetime.now()
-    
-    @classmethod
-    def create_new(
-        cls,
-        export_type: str,
-        export_format: str,
-        destination_path: str,
-        filters: Optional[Dict[str, Any]] = None
-    ) -> "DataExportJob":
-        """Cria novo job de exportação"""
-        return cls(
-            export_type=export_type,
-            format_config=filters or {},
-            output_file_path=destination_path
-        )
-    
-    def complete_successfully(self, file_size_mb: Optional[float], total_records: int):
-        """Completa exportação com sucesso"""
-        self.status = "completed"
-        self.completed_at = datetime.now()
-        self.file_size_mb = file_size_mb
-        self.total_records = total_records
-    
-    def mark_as_failed(self, error_message: str):
-        """Marca exportação como falha"""
-        self.status = "failed"
-        self.completed_at = datetime.now()
-        self.completed_at = datetime.now()
-        self.output_file_path = output_path
-        self.file_size_mb = file_size_mb
-    
-    def get_progress_percentage(self) -> float:
-        """Retorna progresso da exportação"""
-        if self.total_records == 0:
-            return 0.0
-        return (self.records_processed / self.total_records) * 100
+    def update_progress(self, pages_scraped: int, decks_found: int, cards_found: int):
+        """Atualiza progresso da sessão"""
+        self.pages_scraped = pages_scraped
+        self.decks_found = decks_found
+        self.cards_found = cards_found
