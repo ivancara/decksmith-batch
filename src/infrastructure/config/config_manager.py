@@ -1,5 +1,4 @@
 """
-DeckSmith Batch Processing System
 Infrastructure Layer - Configuration Manager Implementation
 """
 
@@ -7,10 +6,10 @@ import os
 from typing import Dict, Any, Optional
 from pathlib import Path
 
-from ...application.interfaces import IConfigManager
+from ...domain.interfaces import IConfigurationManager
 
 
-class EnvironmentConfigManager(IConfigManager):
+class EnvironmentConfigManager(IConfigurationManager):
     """Gerenciador de configurações baseado em variáveis de ambiente"""
     
     def __init__(self):
@@ -110,7 +109,7 @@ class EnvironmentConfigManager(IConfigManager):
             "max_pages_per_session": self.get_config("SCRAPING_MAX_PAGES_PER_SESSION", 1000)
         }
     
-    def get_ml_config(self) -> Dict[str, Any]:
+    def get_config(self, key: str, default: Any = None) -> Any:
         """Obtém configurações de ML"""
         return {
             "models_directory": self.get_config("ML_MODELS_DIR", "./models"),
@@ -129,7 +128,7 @@ class EnvironmentConfigManager(IConfigManager):
             "metrics_tracking": self.get_config("ML_METRICS_TRACKING", True)
         }
     
-    def get_export_config(self) -> Dict[str, Any]:
+    async def get_export_config(self) -> Dict[str, Any]:
         """Obtém configurações de exportação"""
         return {
             "output_directory": self.get_config("EXPORT_OUTPUT_DIR", "./exports"),
@@ -245,3 +244,24 @@ class EnvironmentConfigManager(IConfigManager):
                 safe_config[key] = value
         
         return safe_config
+    
+    # Métodos async para interface IConfigurationManager
+    async def get_ml_models_config(self) -> Dict[str, Any]:
+        """Obtém configurações de modelos ML (async)"""
+        return {
+            "models_directory": self.get_config("ML_MODELS_DIR", "./models"),
+            "max_versions": self.get_config("ML_MAX_VERSIONS", 10),
+            "tensorflow_version": self.get_config("TF_VERSION", "2.20.0")
+        }
+    
+    async def get_export_config_async(self) -> Dict[str, Any]:
+        """Obtém configurações de exportação (async)"""
+        return await self.get_export_config()
+    
+    async def get_batch_processing_config(self) -> Dict[str, Any]:
+        """Obtém configurações de processamento em lote (async)"""
+        return {
+            "chunk_size": self.get_config("BATCH_CHUNK_SIZE", 1000),
+            "max_parallel": self.get_config("BATCH_MAX_PARALLEL", 4),
+            "timeout_minutes": self.get_config("BATCH_TIMEOUT_MINUTES", 30)
+        }

@@ -1,279 +1,232 @@
 """
-DeckSmith Batch Processing System
-Infrastructure Layer - Dependency Injection Container Implementation
+Infrastructure Layer - Container de Dependências
+Implementação de Dependency Injection seguindo SOLID e Clean Architecture
 """
 
-from typing import Dict, Any, TypeVar, Type, Optional, Callable
+from typing import Dict, Any, Optional
 import logging
-from abc import ABC, abstractmethod
 
-# Types
-T = TypeVar('T')
-ServiceFactory = Callable[[], T]
+from ...domain.interfaces import (
+    IAdminSettingsRepository,
+    IModelVersionRepository,
+    IDeckRepository,
+    IConfigurationManager,
+    IProcessingStrategy,
+    ICommand
+)
 
+from ..persistence.repositories import (
+    InMemoryAdminSettingsRepository,
+    InMemoryModelVersionRepository,
+    InMemoryDeckRepository,
+    ConfigurationManager
+)
 
-class IServiceContainer(ABC):
-    """Interface para container de injeção de dependência"""
-    
-    @abstractmethod
-    def register_singleton(self, service_type: Type[T], implementation: Type[T]) -> None:
-        """Registra serviço como singleton"""
-        pass
-    
-    @abstractmethod
-    def register_transient(self, service_type: Type[T], implementation: Type[T]) -> None:
-        """Registra serviço como transient"""
-        pass
-    
-    @abstractmethod
-    def register_instance(self, service_type: Type[T], instance: T) -> None:
-        """Registra instância específica"""
-        pass
-    
-    @abstractmethod
-    def register_factory(self, service_type: Type[T], factory: ServiceFactory[T]) -> None:
-        """Registra factory para criação do serviço"""
-        pass
-    
-    @abstractmethod
-    def resolve(self, service_type: Type[T]) -> T:
-        """Resolve dependência"""
-        pass
-    
-    @abstractmethod
-    def resolve_all(self, service_type: Type[T]) -> list[T]:
-        """Resolve todas as implementações de um tipo"""
-        pass
+from ..services.mock_services import (
+    MockDeckLoadingService,
+    MockDataExportService,
+    MockModelTrainingService
+)
+
+logger = logging.getLogger(__name__)
 
 
-class ServiceLifetime:
-    """Tipos de lifetime para serviços"""
-    SINGLETON = "singleton"
-    TRANSIENT = "transient"
-    INSTANCE = "instance"
-    FACTORY = "factory"
-
-
-class ServiceDescriptor:
-    """Descritor de serviço para o container"""
-    
-    def __init__(self, service_type: Type[T], implementation: Optional[Type[T]] = None, 
-                 instance: Optional[T] = None, factory: Optional[ServiceFactory[T]] = None,
-                 lifetime: str = ServiceLifetime.TRANSIENT):
-        self.service_type = service_type
-        self.implementation = implementation
-        self.instance = instance
-        self.factory = factory
-        self.lifetime = lifetime
-
-
-class ServiceContainer(IServiceContainer):
-    """Container de injeção de dependência simples e eficiente"""
+class DependencyContainer:
+    """Container de dependências para injeção de dependência"""
     
     def __init__(self):
-        self._services: Dict[Type, ServiceDescriptor] = {}
-        self._singletons: Dict[Type, Any] = {}
-        self._logger = logging.getLogger(__name__)
-    
-    def register_singleton(self, service_type: Type[T], implementation: Type[T]) -> None:
-        """Registra serviço como singleton"""
-        self._services[service_type] = ServiceDescriptor(
-            service_type=service_type,
-            implementation=implementation,
-            lifetime=ServiceLifetime.SINGLETON
-        )
-        self._logger.debug(f"Registered singleton: {service_type.__name__} -> {implementation.__name__}")
-    
-    def register_transient(self, service_type: Type[T], implementation: Type[T]) -> None:
-        """Registra serviço como transient"""
-        self._services[service_type] = ServiceDescriptor(
-            service_type=service_type,
-            implementation=implementation,
-            lifetime=ServiceLifetime.TRANSIENT
-        )
-        self._logger.debug(f"Registered transient: {service_type.__name__} -> {implementation.__name__}")
-    
-    def register_instance(self, service_type: Type[T], instance: T) -> None:
-        """Registra instância específica"""
-        self._services[service_type] = ServiceDescriptor(
-            service_type=service_type,
-            instance=instance,
-            lifetime=ServiceLifetime.INSTANCE
-        )
-        self._logger.debug(f"Registered instance: {service_type.__name__}")
-    
-    def register_factory(self, service_type: Type[T], factory: ServiceFactory[T]) -> None:
-        """Registra factory para criação do serviço"""
-        self._services[service_type] = ServiceDescriptor(
-            service_type=service_type,
-            factory=factory,
-            lifetime=ServiceLifetime.FACTORY
-        )
-        self._logger.debug(f"Registered factory: {service_type.__name__}")
-    
-    def resolve(self, service_type: Type[T]) -> T:
-        """Resolve dependência"""
-        if service_type not in self._services:
-            raise ValueError(f"Service {service_type.__name__} not registered")
+        self._repositories: Dict[str, Any] = {}
+        self._services: Dict[str, Any] = {}
+        self._strategies: Dict[str, Any] = {}
+        self._commands: Dict[str, Any] = {}
+        self._config_manager: Optional[IConfigurationManager] = None
         
-        descriptor = self._services[service_type]
-        
-        # Singleton - reutilizar instância existente
-        if descriptor.lifetime == ServiceLifetime.SINGLETON:
-            if service_type in self._singletons:
-                return self._singletons[service_type]
-            
-            instance = self._create_instance(descriptor)
-            self._singletons[service_type] = instance
-            return instance
-        
-        # Instance - retornar instância registrada
-        elif descriptor.lifetime == ServiceLifetime.INSTANCE:
-            if descriptor.instance is None:
-                raise ValueError(f"Instance for {service_type.__name__} is None")
-            return descriptor.instance
-        
-        # Factory - chamar factory
-        elif descriptor.lifetime == ServiceLifetime.FACTORY:
-            if descriptor.factory is None:
-                raise ValueError(f"Factory for {service_type.__name__} is None")
-            return descriptor.factory()
-        
-        # Transient - criar nova instância
-        else:
-            return self._create_instance(descriptor)
+        # Inicializar container
+        self._initialize_repositories()
+        self._initialize_config_manager()
+        self._initialize_services()
+        self._initialize_factories()
     
-    def resolve_all(self, service_type: Type[T]) -> list[T]:
-        """Resolve todas as implementações de um tipo"""
-        # Implementação simples - retorna lista com uma implementação
-        # Pode ser expandida para múltiplas implementações no futuro
+    def _initialize_repositories(self):
+        """Inicializa repositórios"""
+        # Repositórios em memória para desenvolvimento/teste
+        self._repositories['admin_settings'] = InMemoryAdminSettingsRepository()
+        self._repositories['model_versions'] = InMemoryModelVersionRepository()
+        self._repositories['decks'] = InMemoryDeckRepository()
+        
+        logger.info("Repositórios inicializados")
+    
+    def _initialize_config_manager(self):
+        """Inicializa gerenciador de configuração"""
+        settings_repo = self.get_repository('admin_settings')
+        self._config_manager = ConfigurationManager(settings_repo)
+        
+        logger.info("Gerenciador de configuração inicializado")
+    
+    def _initialize_services(self):
+        """Inicializa serviços de domínio"""
+        # Serviços mock para desenvolvimento
+        self._services['deck_loading'] = MockDeckLoadingService()
+        self._services['data_export'] = MockDataExportService()
+        self._services['model_training'] = MockModelTrainingService()
+        
+        logger.info("Serviços inicializados")
+    
+    def _initialize_factories(self):
+        """Inicializa factories"""
+        # Importação lazy para evitar dependências circulares
         try:
-            instance = self.resolve(service_type)
-            return [instance]
-        except ValueError:
-            return []
+            from ...application.strategies.processing_strategies import StrategyFactory
+            from ...application.commands.batch_commands import CommandFactory
+            
+            # Strategy Factory
+            self._strategies['factory'] = StrategyFactory(
+                deck_service=self._services['deck_loading'],
+                export_service=self._services['data_export'],
+                training_service=self._services['model_training'],
+                deck_repository=self.get_repository('decks'),
+                model_repository=self.get_repository('model_versions'),
+                config_manager=self._config_manager
+            )
+            
+            # Command Factory  
+            self._commands['factory'] = CommandFactory(
+                strategy_factory=self._strategies['factory']
+            )
+            
+            logger.info("Factories inicializadas")
+        except ImportError as e:
+            logger.warning(f"Não foi possível inicializar factories: {e}")
     
-    def _create_instance(self, descriptor: ServiceDescriptor) -> Any:
-        """Cria instância do serviço"""
-        if descriptor.implementation is None:
-            raise ValueError(f"No implementation found for {descriptor.service_type.__name__}")
-        
-        try:
-            # Injeção de dependência no construtor
-            return self._create_with_dependency_injection(descriptor.implementation)
-        except Exception as e:
-            self._logger.error(f"Failed to create instance of {descriptor.implementation.__name__}: {e}")
-            raise
+    # Métodos para obter repositórios
+    def get_repository(self, name: str) -> Any:
+        """Obtém repositório por nome"""
+        if name not in self._repositories:
+            raise ValueError(f"Repositório '{name}' não encontrado")
+        return self._repositories[name]
     
-    def _create_with_dependency_injection(self, implementation_type: Type[T]) -> T:
-        """Cria instância com injeção de dependência automática"""
-        try:
-            # Tentar criar sem dependências primeiro
-            return implementation_type()
-        except TypeError:
-            # Se falhar, tentar injeção de dependência
-            import inspect
-            
-            signature = inspect.signature(implementation_type.__init__)
-            parameters = signature.parameters
-            
-            # Pular 'self'
-            param_names = list(parameters.keys())[1:]
-            
-            if not param_names:
-                return implementation_type()
-            
-            # Resolver dependências
-            dependencies = []
-            for param_name in param_names:
-                param = parameters[param_name]
-                if param.annotation != inspect.Parameter.empty:
-                    try:
-                        dependency = self.resolve(param.annotation)
-                        dependencies.append(dependency)
-                    except ValueError:
-                        if param.default != inspect.Parameter.empty:
-                            # Usar valor padrão se disponível
-                            break
-                        else:
-                            raise ValueError(f"Cannot resolve dependency {param.annotation.__name__} for {implementation_type.__name__}")
-                else:
-                    raise ValueError(f"Parameter {param_name} in {implementation_type.__name__} has no type annotation")
-            
-            return implementation_type(*dependencies)
+    def get_admin_settings_repository(self) -> IAdminSettingsRepository:
+        """Obtém repositório de configurações administrativas"""
+        return self.get_repository('admin_settings')
     
-    def is_registered(self, service_type: Type[T]) -> bool:
-        """Verifica se serviço está registrado"""
-        return service_type in self._services
+    def get_model_version_repository(self) -> IModelVersionRepository:
+        """Obtém repositório de versões de modelos"""
+        return self.get_repository('model_versions')
     
-    def get_registration_info(self, service_type: Type[T]) -> Optional[Dict[str, Any]]:
-        """Obtém informações sobre registro do serviço"""
-        if service_type not in self._services:
-            return None
-        
-        descriptor = self._services[service_type]
-        return {
-            "service_type": descriptor.service_type.__name__,
-            "implementation": descriptor.implementation.__name__ if descriptor.implementation else None,
-            "lifetime": descriptor.lifetime,
-            "has_instance": descriptor.instance is not None,
-            "has_factory": descriptor.factory is not None,
-            "is_singleton_created": service_type in self._singletons
+    def get_deck_repository(self) -> IDeckRepository:
+        """Obtém repositório de decks"""
+        return self.get_repository('decks')
+    
+    # Métodos para obter serviços
+    def get_service(self, name: str) -> Any:
+        """Obtém serviço por nome"""
+        if name not in self._services:
+            raise ValueError(f"Serviço '{name}' não encontrado")
+        return self._services[name]
+    
+    def get_config_manager(self) -> IConfigurationManager:
+        """Obtém gerenciador de configuração"""
+        if self._config_manager is None:
+            raise ValueError("Gerenciador de configuração não inicializado")
+        return self._config_manager
+    
+    # Métodos para obter strategies
+    def get_strategy_factory(self):
+        """Obtém factory de strategies"""
+        if 'factory' not in self._strategies:
+            raise ValueError("Strategy factory não inicializada")
+        return self._strategies['factory']
+    
+    def get_strategy(self, strategy_type: str) -> IProcessingStrategy:
+        """Obtém strategy por tipo"""
+        factory = self.get_strategy_factory()
+        return factory.create_strategy(strategy_type)
+    
+    # Métodos para obter commands
+    def get_command_factory(self):
+        """Obtém factory de commands"""
+        if 'factory' not in self._commands:
+            raise ValueError("Command factory não inicializada")
+        return self._commands['factory']
+    
+    def get_command(self, command_type: str, **kwargs) -> ICommand:
+        """Obtém command por tipo"""
+        factory = self.get_command_factory()
+        return factory.create_command(command_type, **kwargs)
+    
+    # Métodos de configuração
+    def configure_repository(self, name: str, repository: Any):
+        """Configura repositório personalizado"""
+        self._repositories[name] = repository
+        logger.info(f"Repositório '{name}' configurado")
+    
+    def configure_service(self, name: str, service: Any):
+        """Configura serviço personalizado"""
+        self._services[name] = service
+        logger.info(f"Serviço '{name}' configurado")
+    
+    # Health check
+    def health_check(self) -> Dict[str, str]:
+        """Verifica saúde do container"""
+        status = {
+            'repositories': 'OK' if self._repositories else 'ERROR',
+            'config_manager': 'OK' if self._config_manager else 'ERROR',
+            'strategy_factory': 'OK' if 'factory' in self._strategies else 'ERROR',
+            'command_factory': 'OK' if 'factory' in self._commands else 'ERROR'
         }
-    
-    def clear_singletons(self) -> None:
-        """Limpa cache de singletons"""
-        self._singletons.clear()
-        self._logger.debug("Cleared singleton cache")
-    
-    def get_all_registrations(self) -> Dict[str, Dict[str, Any]]:
-        """Obtém informações sobre todos os registros"""
-        result = {}
-        for service_type in self._services.keys():
-            info = self.get_registration_info(service_type)
-            if info is not None:
-                result[service_type.__name__] = info
-        return result
+        
+        overall_status = 'OK' if all(s == 'OK' for s in status.values()) else 'ERROR'
+        status['overall'] = overall_status
+        
+        return status
 
 
-# Container global para a aplicação
-_container: Optional[ServiceContainer] = None
+# Instância global do container (Singleton pattern)
+_container: Optional[DependencyContainer] = None
 
 
-def get_container() -> ServiceContainer:
-    """Obtém container global"""
+def get_container() -> DependencyContainer:
+    """Obtém instância global do container de dependências"""
     global _container
     if _container is None:
-        _container = ServiceContainer()
+        _container = DependencyContainer()
+        logger.info("Container de dependências inicializado")
     return _container
 
 
-def reset_container() -> None:
-    """Reseta container global"""
+def reset_container():
+    """Reseta container (útil para testes)"""
     global _container
     _container = None
+    logger.info("Container de dependências resetado")
 
 
-# Decorators para facilitar registro
-def singleton(service_type: Type[T]):
-    """Decorator para registrar como singleton"""
-    def decorator(implementation: Type[T]) -> Type[T]:
-        get_container().register_singleton(service_type, implementation)
-        return implementation
-    return decorator
+# Funções de conveniência para acesso direto
+def get_admin_settings_repository() -> IAdminSettingsRepository:
+    """Acesso direto ao repositório de configurações"""
+    return get_container().get_admin_settings_repository()
 
 
-def transient(service_type: Type[T]):
-    """Decorator para registrar como transient"""
-    def decorator(implementation: Type[T]) -> Type[T]:
-        get_container().register_transient(service_type, implementation)
-        return implementation
-    return decorator
+def get_model_version_repository() -> IModelVersionRepository:
+    """Acesso direto ao repositório de versões de modelos"""
+    return get_container().get_model_version_repository()
 
 
-def injectable(cls: Type[T]) -> Type[T]:
-    """Decorator para marcar classe como injetável"""
-    # Por enquanto apenas marca a classe
-    # Pode ser expandido para análise automática de dependências
-    setattr(cls, '_injectable', True)
-    return cls
+def get_deck_repository() -> IDeckRepository:
+    """Acesso direto ao repositório de decks"""
+    return get_container().get_deck_repository()
+
+
+def get_config_manager() -> IConfigurationManager:
+    """Acesso direto ao gerenciador de configuração"""
+    return get_container().get_config_manager()
+
+
+def get_strategy(strategy_type: str) -> IProcessingStrategy:
+    """Acesso direto a strategy"""
+    return get_container().get_strategy(strategy_type)
+
+
+def get_command(command_type: str, **kwargs) -> ICommand:
+    """Acesso direto a command"""
+    return get_container().get_command(command_type, **kwargs)

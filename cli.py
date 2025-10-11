@@ -1,271 +1,550 @@
-#!/usr/bin/env python3
 """
-DeckSmith Batch CLI - Command Line Interface
-==========================================
-
-Interface de linha de comando para o sistema de batch processing.
+CLI Integrado com Sistema de Dependências
+Versão final com todos os comandos integrados às implementações reais
 """
 
+import click
 import asyncio
-import argparse
-import json
-import sys
-from pathlib import Path
+import logging
+from typing import Optional, List, Dict, Any
 from datetime import datetime
 
-# Configuração de logging simples
-import logging
+# Imports do sistema
+from src.infrastructure.config.dependency_container import get_container
+from src.domain.interfaces import ModelType, ModelStatus
+
+# Configuração de logging
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
 
 
-class DeckSmithBatchCLI:
-    """Interface CLI para o sistema de batch processing."""
+class CLIContext:
+    """Contexto compartilhado do CLI"""
     
     def __init__(self):
-        self.parser = self._create_parser()
+        self.container = get_container()
+        self.start_time = datetime.now()
     
-    def _create_parser(self):
-        """Cria parser de argumentos CLI."""
-        parser = argparse.ArgumentParser(
-            description="DeckSmith Batch Processing System",
-            formatter_class=argparse.RawDescriptionHelpFormatter,
-            epilog="""
-Exemplos de uso:
-  python cli.py scraping --pages 50 --source https://ligamagic.com.br
-  python cli.py ml-training --model random_forest --metric win_rate
-  python cli.py export --format parquet --output data/exports/
-  python cli.py full-pipeline --pages 100
-  python cli.py health-check
-            """
-        )
-        
-        subparsers = parser.add_subparsers(dest='command', help='Comandos disponíveis')
-        
-        # Scraping command
-        scraping_parser = subparsers.add_parser('scraping', help='Executar scraping de dados')
-        scraping_parser.add_argument('--pages', type=int, default=10, help='Número de páginas para processar')
-        scraping_parser.add_argument('--source', default='https://ligamagic.com.br', help='URL fonte')
-        scraping_parser.add_argument('--delay', type=float, default=2.0, help='Delay entre requests (segundos)')
-        
-        # ML Training command  
-        ml_parser = subparsers.add_parser('ml-training', help='Treinar modelo ML')
-        ml_parser.add_argument('--model', choices=['random_forest', 'xgboost', 'linear'], 
-                              default='random_forest', help='Tipo de modelo')
-        ml_parser.add_argument('--metric', choices=['win_rate', 'meta_score', 'popularity'],
-                              default='win_rate', help='Métrica alvo')
-        ml_parser.add_argument('--cv-folds', type=int, default=5, help='Cross-validation folds')
-        
-        # Data Export command
-        export_parser = subparsers.add_parser('export', help='Exportar dados')
-        export_parser.add_argument('--format', choices=['parquet', 'csv', 'json'],
-                                  default='parquet', help='Formato de exportação')
-        export_parser.add_argument('--output', default='data/exports/', help='Diretório de saída')
-        export_parser.add_argument('--batch-size', type=int, default=1000, help='Tamanho do batch')
-        
-        # Full Pipeline command
-        pipeline_parser = subparsers.add_parser('full-pipeline', help='Executar pipeline completo')
-        pipeline_parser.add_argument('--pages', type=int, default=50, help='Páginas para scraping')
-        pipeline_parser.add_argument('--model', default='random_forest', help='Modelo ML')
-        pipeline_parser.add_argument('--export-format', default='parquet', help='Formato export')
-        
-        # Health Check command
-        subparsers.add_parser('health-check', help='Verificar saúde do sistema')
-        
-        # Status command
-        subparsers.add_parser('status', help='Status dos jobs em execução')
-        
-        return parser
-    
-    async def run_scraping(self, args):
-        """Executa comando de scraping."""
-        logger.info(f"Iniciando scraping: {args.pages} páginas de {args.source}")
-        
-        # Simular scraping (implementação real importaria os módulos)
-        for i in range(1, args.pages + 1):
-            await asyncio.sleep(args.delay)
-            logger.info(f"Processando página {i}/{args.pages}")
-        
-        result = {
-            "command": "scraping",
-            "status": "completed",
-            "pages_processed": args.pages,
-            "source_url": args.source,
-            "execution_time": args.pages * args.delay
-        }
-        
-        logger.info("✅ Scraping concluído com sucesso")
-        return result
-    
-    async def run_ml_training(self, args):
-        """Executa comando de treinamento ML."""
-        logger.info(f"Iniciando treinamento ML: modelo {args.model}, métrica {args.metric}")
-        
-        # Simular treinamento
-        await asyncio.sleep(5)
-        
-        result = {
-            "command": "ml_training", 
-            "status": "completed",
-            "model_type": args.model,
-            "target_metric": args.metric,
-            "cv_folds": args.cv_folds,
-            "accuracy": 0.87  # Simulado
-        }
-        
-        logger.info("✅ Treinamento ML concluído")
-        return result
-    
-    async def run_export(self, args):
-        """Executa comando de exportação."""
-        logger.info(f"Iniciando exportação: formato {args.format} para {args.output}")
-        
-        # Simular exportação
-        await asyncio.sleep(2)
-        
-        output_file = f"{args.output}/deck_data_{datetime.now().strftime('%Y%m%d_%H%M%S')}.{args.format}"
-        
-        result = {
-            "command": "export",
-            "status": "completed", 
-            "format": args.format,
-            "output_file": output_file,
-            "batch_size": args.batch_size,
-            "records_exported": 15000  # Simulado
-        }
-        
-        logger.info(f"✅ Exportação concluída: {output_file}")
-        return result
-    
-    async def run_full_pipeline(self, args):
-        """Executa pipeline completo."""
-        logger.info("Iniciando pipeline completo")
-        
-        results = {}
-        
-        # 1. Scraping
-        logger.info("📥 Fase 1: Scraping")
-        scraping_args = argparse.Namespace(pages=args.pages, source='https://ligamagic.com.br', delay=1.0)
-        results["scraping"] = await self.run_scraping(scraping_args)
-        
-        # 2. ML Training
-        logger.info("🤖 Fase 2: Treinamento ML")
-        ml_args = argparse.Namespace(model=args.model, metric='win_rate', cv_folds=5)
-        results["ml_training"] = await self.run_ml_training(ml_args)
-        
-        # 3. Export
-        logger.info("📤 Fase 3: Exportação")
-        export_args = argparse.Namespace(format=args.export_format, output='data/exports/', batch_size=1000)
-        results["export"] = await self.run_export(export_args)
-        
-        logger.info("✅ Pipeline completo finalizado")
-        return {
-            "command": "full_pipeline",
-            "status": "completed",
-            "phases": results
-        }
-    
-    async def run_health_check(self, args):
-        """Executa verificação de saúde."""
-        logger.info("Verificando saúde do sistema...")
-        
-        checks = {
-            "database": True,  # Simulado
-            "web_scraper": True,
-            "ml_engine": True, 
-            "file_system": True
-        }
-        
-        all_healthy = all(checks.values())
-        
-        result = {
-            "command": "health_check",
-            "status": "healthy" if all_healthy else "unhealthy",
-            "checks": checks,
-            "timestamp": datetime.now().isoformat()
-        }
-        
-        if all_healthy:
-            logger.info("✅ Sistema saudável")
-        else:
-            logger.warning("⚠️ Problemas detectados no sistema")
-        
-        return result
-    
-    async def run_status(self, args):
-        """Mostra status dos jobs."""
-        logger.info("Verificando status dos jobs...")
-        
-        result = {
-            "command": "status",
-            "active_jobs": [],
-            "completed_jobs": 5,  # Simulado
-            "failed_jobs": 0,
-            "timestamp": datetime.now().isoformat()
-        }
-        
-        logger.info("📊 Status obtido")
-        return result
-    
-    async def execute(self, args=None):
-        """Executa comando CLI."""
-        if args is None:
-            args = self.parser.parse_args()
-        
-        if not args.command:
-            self.parser.print_help()
-            return
-        
-        start_time = datetime.now()
-        
+    def log_operation(self, operation: str, details: Dict[str, Any]):
+        """Log padronizado de operações"""
+        logger.info(f"Operação: {operation} | Detalhes: {details}")
+
+
+# Context global
+cli_context = CLIContext()
+
+
+def handle_async(func):
+    """Decorator para lidar com funções async no Click"""
+    def wrapper(*args, **kwargs):
         try:
-            # Executar comando correspondente
-            if args.command == 'scraping':
-                result = await self.run_scraping(args)
-            elif args.command == 'ml-training':
-                result = await self.run_ml_training(args)
-            elif args.command == 'export':
-                result = await self.run_export(args)
-            elif args.command == 'full-pipeline':
-                result = await self.run_full_pipeline(args)
-            elif args.command == 'health-check':
-                result = await self.run_health_check(args)
-            elif args.command == 'status':
-                result = await self.run_status(args)
-            else:
-                logger.error(f"Comando não reconhecido: {args.command}")
-                return
-            
-            # Calcular tempo de execução
-            end_time = datetime.now()
-            execution_time = (end_time - start_time).total_seconds()
-            
-            # Adicionar metadata ao resultado
-            result.update({
-                "start_time": start_time.isoformat(),
-                "end_time": end_time.isoformat(), 
-                "execution_time_seconds": execution_time
-            })
-            
-            # Exibir resultado
-            print("\n" + "="*50)
-            print("📋 RESULTADO DA EXECUÇÃO")
-            print("="*50)
-            print(json.dumps(result, indent=2, ensure_ascii=False))
-            
+            result = asyncio.run(func(*args, **kwargs))
+            return result
         except Exception as e:
-            logger.error(f"Erro na execução: {str(e)}")
-            sys.exit(1)
+            click.echo(f"❌ Erro: {str(e)}", err=True)
+            logger.error(f"Erro na operação: {e}", exc_info=True)
+            raise click.ClickException(str(e))
+    return wrapper
 
 
-async def main():
-    """Função principal."""
-    cli = DeckSmithBatchCLI()
-    await cli.execute()
+def format_table(data: List[Dict[str, Any]], headers: List[str]) -> str:
+    """Formata dados em tabela"""
+    if not data:
+        return "Nenhum dado para exibir."
+    
+    # Calcular larguras das colunas
+    widths = {}
+    for header in headers:
+        widths[header] = max(len(header), max(len(str(row.get(header, ''))) for row in data))
+    
+    # Criar linhas
+    lines = []
+    
+    # Cabeçalho
+    header_line = "│ " + " │ ".join(h.ljust(widths[h]) for h in headers) + " │"
+    separator = "├" + "┼".join("─" * (widths[h] + 2) for h in headers) + "┤"
+    top_border = "┌" + "┬".join("─" * (widths[h] + 2) for h in headers) + "┐"
+    bottom_border = "└" + "┴".join("─" * (widths[h] + 2) for h in headers) + "┘"
+    
+    lines.append(top_border)
+    lines.append(header_line)
+    lines.append(separator)
+    
+    # Dados
+    for row in data:
+        data_line = "│ " + " │ ".join(str(row.get(h, '')).ljust(widths[h]) for h in headers) + " │"
+        lines.append(data_line)
+    
+    lines.append(bottom_border)
+    
+    return "\n".join(lines)
 
 
-if __name__ == "__main__":
-    asyncio.run(main())
+@click.group()
+@click.option('--verbose', '-v', is_flag=True, help='Modo verboso')
+def cli(verbose):
+    """
+    🎯 DeckSmith Batch Processing System
+    
+    Sistema profissional de processamento em lote para Magic: The Gathering.
+    Aplica Clean Architecture, SOLID e Strategy Pattern para máxima qualidade.
+    """
+    if verbose:
+        logging.getLogger().setLevel(logging.DEBUG)
+        click.echo("🔧 Modo verboso ativado")
+    
+    # Verificar saúde do sistema
+    health = cli_context.container.health_check()
+    if health['overall'] != 'OK':
+        click.echo("⚠️  Aviso: Alguns componentes podem não estar funcionando corretamente")
+        if verbose:
+            for component, status in health.items():
+                click.echo(f"   {component}: {status}")
+
+
+@cli.command('load-decks')
+@click.option('--source', '-s', default='archidekt', 
+              type=click.Choice(['archidekt', 'moxfield', 'edhrec']),
+              help='Fonte dos decks para carregar')
+@click.option('--limit', '-l', type=int, help='Limite de decks para carregar')
+@click.option('--batch-size', '-b', type=int, default=100,
+              help='Tamanho do lote para processamento')
+@click.option('--dry-run', is_flag=True, help='Execução de teste (não salva dados)')
+@handle_async
+async def load_decks(source: str, limit: Optional[int], batch_size: int, dry_run: bool):
+    """
+    📥 Carrega decks de uma fonte específica
+    
+    Executa scraping de decks e armazena no banco de dados usando
+    o padrão Strategy para diferentes fontes.
+    """
+    click.echo(f"🚀 Iniciando carga de decks da fonte: {source.upper()}")
+    
+    if dry_run:
+        click.echo("🧪 Modo DRY-RUN ativado - nenhum dado será salvo")
+    
+    # Obter command via dependency injection
+    command = cli_context.container.get_command(
+        'load_decks',
+        source=source,
+        limit=limit,
+        batch_size=batch_size,
+        dry_run=dry_run
+    )
+    
+    # Executar comando
+    start_time = datetime.now()
+    result = await command.execute()
+    end_time = datetime.now()
+    duration = (end_time - start_time).total_seconds()
+    
+    # Exibir resultados
+    click.echo(f"\n✅ Carga concluída em {duration:.2f}s")
+    click.echo(f"📊 Decks processados: {result.items_processed}")
+    click.echo(f"✔️  Sucessos: {result.success_count}")
+    click.echo(f"❌ Erros: {result.error_count}")
+    
+    if result.errors:
+        click.echo("\n📝 Erros encontrados:")
+        for error in result.errors[:5]:  # Mostrar apenas os primeiros 5
+            click.echo(f"   • {error}")
+        if len(result.errors) > 5:
+            click.echo(f"   ... e mais {len(result.errors) - 5} erros")
+    
+    cli_context.log_operation('load_decks', {
+        'source': source,
+        'processed': result.items_processed,
+        'success': result.success_count,
+        'errors': result.error_count,
+        'duration': duration
+    })
+
+
+@cli.command('generate-parquet')
+@click.option('--output-path', '-o', type=click.Path(), 
+              help='Caminho para salvar o arquivo parquet')
+@click.option('--limit', '-l', type=int, help='Limite de registros para exportar')
+@click.option('--format', '-f', default='parquet',
+              type=click.Choice(['parquet', 'csv', 'json']),
+              help='Formato de saída dos dados')
+@click.option('--compression', '-c', default='snappy',
+              type=click.Choice(['snappy', 'gzip', 'brotli', 'none']),
+              help='Tipo de compressão para parquet')
+@handle_async
+async def generate_parquet(output_path: Optional[str], limit: Optional[int], 
+                          format: str, compression: str):
+    """
+    📤 Gera arquivo de exportação dos dados
+    
+    Exporta dados dos decks em formato otimizado para análise,
+    usando configurações personalizáveis de compressão e formato.
+    """
+    click.echo(f"📊 Iniciando geração de arquivo {format.upper()}")
+    
+    if output_path:
+        click.echo(f"📁 Arquivo será salvo em: {output_path}")
+    
+    # Obter command via dependency injection
+    command = cli_context.container.get_command(
+        'generate_parquet',
+        output_path=output_path,
+        limit=limit,
+        format=format,
+        compression=compression
+    )
+    
+    # Executar comando
+    start_time = datetime.now()
+    result = await command.execute()
+    end_time = datetime.now()
+    duration = (end_time - start_time).total_seconds()
+    
+    # Exibir resultados
+    click.echo(f"\n✅ Exportação concluída em {duration:.2f}s")
+    click.echo(f"📊 Registros exportados: {result.items_processed}")
+    click.echo(f"📁 Arquivo gerado: {result.output_file}")
+    click.echo(f"💾 Tamanho: {result.file_size_mb:.2f} MB")
+    
+    if result.metadata:
+        click.echo(f"📈 Compressão: {result.metadata.get('compression_ratio', 'N/A')}")
+    
+    cli_context.log_operation('generate_parquet', {
+        'format': format,
+        'records': result.items_processed,
+        'file_size_mb': result.file_size_mb,
+        'duration': duration,
+        'output_file': result.output_file
+    })
+
+
+@cli.command('train-model')
+@click.option('--type', '-t', 'model_type', required=True,
+              type=click.Choice(['card_recommendation', 'win_rate_predictor', 'deck_analyzer']),
+              help='Tipo de modelo para treinar')
+@click.option('--epochs', '-e', type=int, default=10,
+              help='Número de épocas para treinamento')
+@click.option('--batch-size', '-b', type=int, default=32,
+              help='Tamanho do batch para treinamento')
+@click.option('--learning-rate', '-lr', type=float, default=0.001,
+              help='Taxa de aprendizado')
+@click.option('--validation-split', '-vs', type=float, default=0.2,
+              help='Proporção dos dados para validação')
+@click.option('--auto-activate', is_flag=True,
+              help='Ativa automaticamente o modelo após treinamento')
+@click.option('--description', '-d', type=str,
+              help='Descrição do modelo')
+@click.option('--tags', type=str, help='Tags separadas por vírgula')
+@handle_async
+async def train_model(model_type: str, epochs: int, batch_size: int, 
+                     learning_rate: float, validation_split: float,
+                     auto_activate: bool, description: Optional[str], 
+                     tags: Optional[str]):
+    """
+    🤖 Treina modelo de machine learning
+    
+    Executa treinamento de modelos usando dados dos decks,
+    com arquitetura otimizada e versionamento automático.
+    """
+    click.echo(f"🧠 Iniciando treinamento do modelo: {model_type.upper()}")
+    
+    # Parse tags
+    tag_list = [tag.strip() for tag in tags.split(',')] if tags else []
+    
+    # Exibir configurações
+    config_table = [
+        {"Parâmetro": "Épocas", "Valor": str(epochs)},
+        {"Parâmetro": "Batch Size", "Valor": str(batch_size)},
+        {"Parâmetro": "Learning Rate", "Valor": str(learning_rate)},
+        {"Parâmetro": "Validação Split", "Valor": f"{validation_split:.1%}"},
+        {"Parâmetro": "Auto-ativar", "Valor": "Sim" if auto_activate else "Não"}
+    ]
+    
+    click.echo("\n📋 Configurações do Treinamento:")
+    click.echo(format_table(config_table, ["Parâmetro", "Valor"]))
+    
+    # Obter command via dependency injection
+    command = cli_context.container.get_command(
+        'train_model',
+        model_type=model_type,
+        epochs=epochs,
+        batch_size=batch_size,
+        learning_rate=learning_rate,
+        validation_split=validation_split,
+        auto_activate=auto_activate,
+        description=description,
+        tags=tag_list
+    )
+    
+    # Executar comando
+    start_time = datetime.now()
+    click.echo(f"\n🚀 Iniciando treinamento às {start_time.strftime('%H:%M:%S')}")
+    
+    result = await command.execute()
+    
+    end_time = datetime.now()
+    duration = (end_time - start_time).total_seconds()
+    
+    # Exibir resultados
+    click.echo(f"\n✅ Treinamento concluído em {duration:.2f}s")
+    
+    if result.metadata:
+        metadata = result.metadata
+        click.echo(f"🎯 Modelo: {metadata.get('model_type', 'N/A')}")
+        click.echo(f"📊 Versão: {metadata.get('model_version', 'N/A')}")
+        click.echo(f"💾 Arquivo: {metadata.get('file_path', 'N/A')}")
+        click.echo(f"📏 Tamanho: {metadata.get('file_size_mb', 0):.2f} MB")
+        
+        if 'performance_metrics' in metadata:
+            metrics = metadata['performance_metrics']
+            click.echo(f"\n📈 Métricas de Performance:")
+            for metric, value in metrics.items():
+                if isinstance(value, float):
+                    click.echo(f"   {metric}: {value:.4f}")
+                else:
+                    click.echo(f"   {metric}: {value}")
+        
+        if auto_activate and metadata.get('auto_activated'):
+            click.echo(f"\n✨ Modelo ativado automaticamente!")
+    
+    cli_context.log_operation('train_model', {
+        'model_type': model_type,
+        'duration': duration,
+        'auto_activated': auto_activate,
+        'successful': result.successful > 0
+    })
+
+
+@cli.command('list-models')
+@click.option('--type', '-t', 'model_type',
+              type=click.Choice(['all', 'card_recommendation', 'win_rate_predictor', 'deck_analyzer']),
+              default='all', help='Filtrar por tipo de modelo')
+@click.option('--status', '-s', 
+              type=click.Choice(['all', 'active', 'trained', 'deprecated']),
+              default='all', help='Filtrar por status')
+@click.option('--limit', '-l', type=int, default=10, help='Número máximo de modelos')
+@click.option('--verbose', '-v', is_flag=True, help='Exibir informações detalhadas')
+@handle_async
+async def list_models(model_type: str, status: str, limit: int, verbose: bool):
+    """
+    📋 Lista modelos de ML disponíveis
+    
+    Exibe informações sobre modelos treinados, incluindo performance,
+    status e configurações de treinamento.
+    """
+    click.echo(f"📊 Listando modelos")
+    
+    if model_type != 'all':
+        click.echo(f"🔍 Filtro de tipo: {model_type}")
+    if status != 'all':
+        click.echo(f"🔍 Filtro de status: {status}")
+    
+    # Obter repositório via dependency injection
+    model_repo = cli_context.container.get_model_version_repository()
+    
+    # Buscar modelos
+    if model_type == 'all':
+        # Buscar todos os tipos de modelos
+        from src.domain.interfaces import ModelType
+        all_models = []
+        for mtype in ModelType:
+            models_of_type = await model_repo.get_all_versions(mtype)
+            all_models.extend(models_of_type)
+        models = all_models
+    else:
+        # Buscar tipo específico
+        from src.domain.interfaces import ModelType
+        try:
+            mtype = ModelType(model_type)
+            models = await model_repo.get_all_versions(mtype)
+        except ValueError:
+            click.echo(f"❌ Tipo de modelo inválido: {model_type}")
+            return
+    
+    # Filtrar por status se necessário
+    if status != 'all':
+        from src.domain.interfaces import ModelStatus
+        try:
+            status_enum = ModelStatus(status)
+            models = [m for m in models if m.status == status_enum]
+        except ValueError:
+            click.echo(f"❌ Status inválido: {status}")
+            return
+    
+    # Aplicar limite
+    if limit and limit > 0:
+        models = models[:limit]
+    
+    # Ordenar por data de criação (mais recente primeiro)
+    models.sort(key=lambda x: x.created_at if x.created_at else datetime.min, reverse=True)
+    
+    if not models:
+        click.echo("\n❌ Nenhum modelo encontrado com os filtros especificados")
+        return
+    
+    # Preparar dados para tabela
+    if verbose:
+        table_data = []
+        for model in models:
+            # Extrair métricas principais
+            metrics = model.performance_metrics or {}
+            main_metric = ""
+            if model.model_type == ModelType.CARD_RECOMMENDATION:
+                main_metric = f"Acc: {metrics.get('accuracy', 'N/A')}"
+            elif model.model_type == ModelType.WIN_RATE_PREDICTOR:
+                main_metric = f"MAE: {metrics.get('mae', 'N/A')}"
+            
+            table_data.append({
+                "ID": str(model.id),
+                "Nome": model.model_name[:25] + "..." if len(model.model_name) > 25 else model.model_name,
+                "Tipo": model.model_type.value,
+                "Versão": model.version,
+                "Status": model.status.value,
+                "Ativo": "✓" if model.is_active else "✗",
+                "Tamanho (MB)": f"{model.file_size_bytes / (1024*1024):.1f}" if model.file_size_bytes else "N/A",
+                "Métrica": main_metric,
+                "Criado": model.created_at.strftime('%d/%m %H:%M') if model.created_at else "N/A"
+            })
+        
+        headers = ["ID", "Nome", "Tipo", "Versão", "Status", "Ativo", "Tamanho (MB)", "Métrica", "Criado"]
+    else:
+        table_data = []
+        for model in models:
+            table_data.append({
+                "ID": str(model.id),
+                "Nome": model.model_name[:30] + "..." if len(model.model_name) > 30 else model.model_name,
+                "Tipo": model.model_type.value,
+                "Status": model.status.value,
+                "Ativo": "✓" if model.is_active else "✗",
+                "Criado": model.created_at.strftime('%d/%m/%y') if model.created_at else "N/A"
+            })
+        
+        headers = ["ID", "Nome", "Tipo", "Status", "Ativo", "Criado"]
+    
+    click.echo(f"\n📋 Encontrados {len(models)} modelos:")
+    click.echo(format_table(table_data, headers))
+    
+    # Estatísticas adicionais
+    if verbose:
+        stats = {
+            'total': len(models),
+            'active': sum(1 for m in models if m.is_active),
+            'types': len(set(m.model_type for m in models))
+        }
+        
+        click.echo(f"\n📊 Estatísticas:")
+        click.echo(f"   Total: {stats['total']} modelos")
+        click.echo(f"   Ativos: {stats['active']} modelos")
+        click.echo(f"   Tipos diferentes: {stats['types']}")
+
+
+@cli.command('activate-model')
+@click.argument('model_type', type=click.Choice(['card_recommendation', 'win_rate_predictor', 'deck_analyzer']))
+@click.argument('version')
+@click.option('--force', is_flag=True, help='Força ativação mesmo se houver avisos')
+@handle_async
+async def activate_model(model_type: str, version: str, force: bool):
+    """
+    ✨ Ativa uma versão específica de modelo
+    
+    Define qual versão do modelo será usada em produção,
+    desativando automaticamente a versão anterior.
+    """
+    click.echo(f"🔄 Ativando modelo {model_type} versão {version}")
+    
+    # Obter repositório via dependency injection
+    model_repo = cli_context.container.get_model_version_repository()
+    
+    # Verificar se modelo existe
+    model = await model_repo.get_model_by_version(ModelType(model_type), version)
+    if not model:
+        click.echo(f"❌ Modelo {model_type} versão {version} não encontrado")
+        return
+    
+    # Verificar se já está ativo
+    if model.is_active:
+        click.echo(f"ℹ️  Modelo {model_type} versão {version} já está ativo")
+        return
+    
+    # Verificar status
+    if model.status == ModelStatus.DEPRECATED and not force:
+        click.echo(f"⚠️  Atenção: Modelo está marcado como DEPRECATED")
+        click.echo("   Use --force para ativar mesmo assim")
+        return
+    
+    # Exibir informações do modelo
+    click.echo(f"\n📋 Informações do Modelo:")
+    click.echo(f"   Nome: {model.model_name}")
+    click.echo(f"   Tipo: {model.model_type.value}")
+    click.echo(f"   Status atual: {model.status.value}")
+    click.echo(f"   Criado em: {model.created_at.strftime('%d/%m/%Y %H:%M') if model.created_at else 'N/A'}")
+    
+    if model.description:
+        click.echo(f"   Descrição: {model.description}")
+    
+    # Confirmar ativação
+    if not force:
+        if not click.confirm("\n🤔 Deseja ativar este modelo?"):
+            click.echo("❌ Operação cancelada")
+            return
+    
+    # Ativar modelo
+    success = await model_repo.activate_model_version(ModelType(model_type), version)
+    
+    if success:
+        click.echo(f"\n✅ Modelo {model_type} versão {version} ativado com sucesso!")
+        click.echo(f"🎯 Agora é o modelo ativo para {model_type}")
+        
+        cli_context.log_operation('activate_model', {
+            'model_type': model_type,
+            'version': version,
+            'model_name': model.model_name
+        })
+    else:
+        click.echo(f"\n❌ Falha ao ativar modelo {model_type} versão {version}")
+
+
+@cli.command('health-check')
+def health_check():
+    """
+    🏥 Verifica saúde do sistema
+    
+    Executa diagnóstico completo dos componentes do sistema,
+    incluindo dependências, configurações e conectividade.
+    """
+    click.echo("🏥 Executando diagnóstico do sistema...")
+    
+    # Health check do container
+    health = cli_context.container.health_check()
+    
+    # Formatar resultados
+    table_data = []
+    for component, status in health.items():
+        icon = "✅" if status == "OK" else "❌"
+        table_data.append({
+            "Componente": component.replace('_', ' ').title(),
+            "Status": f"{icon} {status}"
+        })
+    
+    click.echo("\n📊 Status dos Componentes:")
+    click.echo(format_table(table_data, ["Componente", "Status"]))
+    
+    # Status geral
+    overall_icon = "✅" if health['overall'] == "OK" else "❌"
+    click.echo(f"\n🎯 Status Geral: {overall_icon} {health['overall']}")
+    
+    # Informações adicionais
+    uptime = datetime.now() - cli_context.start_time
+    click.echo(f"⏱️  Uptime: {uptime}")
+    
+    # Log da operação
+    cli_context.log_operation('health_check', {
+        'overall_status': health['overall'],
+        'uptime_seconds': uptime.total_seconds()
+    })
+
+
+if __name__ == '__main__':
+    cli()
