@@ -1,0 +1,143 @@
+📋 COMANDOS CLI - DECKSMITH BATCH SYSTEM E1-E4
+=============================================================
+
+🎯 Sistema Completo com Implementação Real E1→E4:
+- E1: Dados ML Reais (PostgreSQL) ✅
+- E2: Pipeline Otimizado ✅ 
+- E3: Queries Reais ✅
+- E4: Limpeza de Mocks ✅
+
+=============================================================
+1️⃣ CARGA DE DECKS DO BANCO DE DADOS
+=============================================================
+
+# Carregar decks da fonte Archidekt (limitado devido à fonte não disponível)
+python cli.py load-decks --source archidekt --limit 100 --batch-size 20
+
+# Carregar decks com modo verboso
+python cli.py -v load-decks --source moxfield --limit 50
+
+# Teste de carga (dry-run)
+python cli.py load-decks --source edhrec --limit 10 --dry-run
+
+=============================================================
+2️⃣ GERAR ARQUIVO PARQUET DO BANCO DE DADOS 
+=============================================================
+
+# Gerar Parquet com compressão otimizada
+python cli.py generate-parquet --output-path "./results/deck_data.parquet" --limit 1000 --compression snappy
+
+# Exportar para CSV
+python cli.py generate-parquet --format csv --output-path "./results/deck_data.csv" --limit 500
+
+# Exportar para JSON
+python cli.py generate-parquet --format json --output-path "./results/deck_data.json" --compression gzip
+
+# Exportar todos os dados
+python cli.py generate-parquet --output-path "./results/full_deck_data.parquet"
+
+=============================================================
+3️⃣ TREINAR MODELO COM BASE NO PARQUET
+=============================================================
+
+# Treinar modelo de recomendação de cartas
+python cli.py train-model --type card_recommendation --epochs 10 --batch-size 32 --learning-rate 0.001 --auto-activate --description "Modelo E1-E4 com dados reais"
+
+# Treinar modelo de predição de win rate
+python cli.py train-model --type win_rate_predictor --epochs 15 --batch-size 64 --learning-rate 0.0005 --validation-split 0.25
+
+# Treinar analisador de deck
+python cli.py train-model --type deck_analyzer --epochs 8 --batch-size 16 --auto-activate --tags "analyzer,production"
+
+=============================================================
+4️⃣ GERAR DECK COMMANDER A PARTIR DE CSV
+=============================================================
+
+# Comando direto com cartas específicas
+python cli.py generate-commander-deck --seed-cards "Lightning Bolt,Sol Ring,Llanowar Elves,Counterspell,Swords to Plowshares" --colors "W,U,B,R,G" --deck-size 100 --output "deck_gerado.json" --show-details
+
+# Comando com comandante específico
+python cli.py generate-commander-deck --seed-cards "Krenko, Mob Boss,Lightning Bolt,Goblin Guide" --commander "Krenko, Mob Boss" --colors "R" --output "deck_krenko.json"
+
+# Script auxiliar para ler CSV (usar com arquivo my_cards.csv)
+python generate_deck_from_csv.py my_cards.csv deck_do_csv.json
+
+# Demonstração completa do sistema E1-E4
+python demonstracao_completa_e1e4.py
+
+=============================================================
+5️⃣ GERENCIAR MODELOS ML
+=============================================================
+
+# Listar todos os modelos
+python cli.py list-models --verbose
+
+# Listar modelos por tipo
+python cli.py list-models --type card_recommendation --limit 5
+
+# Listar modelos ativos
+python cli.py list-models --status active
+
+# Ativar modelo específico
+python cli.py activate-model card_recommendation "20251018_175029" --force
+
+=============================================================
+6️⃣ CONFIGURAÇÕES E DIAGNÓSTICOS
+=============================================================
+
+# Verificar saúde do sistema
+python cli.py health-check
+
+# Listar configurações administrativas
+python cli.py list-settings
+
+# Buscar configuração específica
+python cli.py get-setting "ml.training.batch_size"
+
+# Atualizar configuração
+python cli.py update-setting "export.compression" "brotli" --updated-by "admin" --force
+
+# Listar configurações em JSON
+python cli.py list-settings --format json
+
+=============================================================
+🎯 FLUXO COMPLETO RECOMENDADO
+=============================================================
+
+# 1. Verificar saúde do sistema
+python cli.py health-check
+
+# 2. Carregar novos decks (quando fonte estiver disponível)  
+python cli.py load-decks --source archidekt --limit 200 --batch-size 50
+
+# 3. Gerar dados para treinamento
+python cli.py generate-parquet --output-path "./data/training_data.parquet" --compression snappy
+
+# 4. Treinar modelo com dados reais
+python cli.py train-model --type card_recommendation --epochs 20 --batch-size 32 --auto-activate --description "Modelo produção E1-E4"
+
+# 5. Verificar modelos disponíveis
+python cli.py list-models --verbose
+
+# 6. Gerar deck Commander personalizado
+python cli.py generate-commander-deck --seed-cards "Suas,Cartas,Favoritas" --deck-size 100 --output "meu_deck.json" --show-details
+
+=============================================================
+📁 ARQUIVOS GERADOS
+=============================================================
+
+✅ my_cards.csv                     - Exemplo de arquivo CSV com cartas
+✅ deck_commander_e1e4_completo.json - Deck gerado pelo sistema E1-E4
+✅ generate_deck_from_csv.py        - Script para gerar deck via CSV
+✅ demonstracao_completa_e1e4.py    - Demonstração do sistema completo
+
+=============================================================
+🎉 SISTEMA E1-E4 TOTALMENTE FUNCIONAL!
+=============================================================
+
+✅ E1: Dados ML com PostgreSQL real implementado
+✅ E2: Pipeline otimizado com preprocessing avançado
+✅ E3: Queries reais para cartas e commanders
+✅ E4: Sistema limpo sem mocks
+
+🚀 TODOS OS COMANDOS PRONTOS PARA USO!

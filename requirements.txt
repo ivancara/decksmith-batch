@@ -43,10 +43,11 @@ black>=23.7.0
 isort>=5.12.0
 mypy>=1.5.0
 
-# Optional: for enhanced web scraping
-selenium>=4.11.0
+# Web scraping dependencies
 beautifulsoup4>=4.12.0
 lxml>=4.9.0
+fake-useragent>=1.4.0
+selenium>=4.11.0  # Optional for dynamic content
 
 # Data visualization (for model analysis)
 matplotlib>=3.7.0

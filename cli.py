@@ -6,6 +6,7 @@ Versão final com todos os comandos integrados às implementações reais
 import click
 import asyncio
 import logging
+import json
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 
@@ -736,6 +737,186 @@ def parse_config_value(value: str) -> Any:
     
     # Retornar como string
     return value
+
+
+@cli.command('generate-commander-deck')
+@click.option('--seed-cards', '-s', required=True, type=str, 
+              help='Cartas sementes separadas por vírgula')
+@click.option('--commander', '-c', type=str, 
+              help='Nome do comandante (opcional, será sugerido se omitido)')
+@click.option('--colors', type=str, 
+              help='Cores desejadas separadas por vírgula (ex: W,U,B)')
+@click.option('--deck-size', type=int, default=100, 
+              help='Tamanho do deck (padrão: 100)')
+@click.option('--output', '-o', type=str, 
+              help='Arquivo para salvar o deck em formato JSON')
+@click.option('--show-details', is_flag=True, 
+              help='Mostrar detalhes completos do deck gerado')
+@handle_async
+async def generate_commander_deck(seed_cards: str, commander: Optional[str], 
+                                colors: Optional[str], deck_size: int, 
+                                output: Optional[str], show_details: bool):
+    """
+    🎴 Gera deck de Commander usando IA
+    
+    Usa machine learning e regras heurísticas para criar um deck
+    balanceado de Commander baseado em cartas sementes fornecidas.
+    """
+    try:
+        # Processar inputs
+        card_list = [card.strip() for card in seed_cards.split(',') if card.strip()]
+        color_list = None
+        if colors:
+            color_list = [color.strip().upper() for color in colors.split(',') if color.strip()]
+            # Validar cores
+            valid_colors = {'W', 'U', 'B', 'R', 'G'}
+            invalid_colors = set(color_list) - valid_colors
+            if invalid_colors:
+                click.echo(f"❌ Cores inválidas: {invalid_colors}. Use: W, U, B, R, G", err=True)
+                return
+        
+        click.echo(f"🎯 Gerando deck Commander com {len(card_list)} cartas sementes...")
+        if commander:
+            click.echo(f"👑 Comandante especificado: {commander}")
+        if color_list:
+            click.echo(f"🎨 Cores alvo: {', '.join(color_list)}")
+        
+        # Obter serviço via container
+        training_service = cli_context.container.get_model_training_service()
+        
+        # Gerar deck
+        start_time = datetime.now()
+        result = await training_service.generate_commander_deck(
+            seed_cards=card_list,
+            commander=commander,
+            target_colors=color_list,
+            deck_size=deck_size
+        )
+        end_time = datetime.now()
+        duration = (end_time - start_time).total_seconds()
+        
+        if result['success']:
+            deck = result['deck']
+            validation = result['validation']
+            
+            # Cabeçalho de sucesso
+            click.echo(f"\n🎉 Deck de Commander Gerado em {duration:.2f}s!")
+            click.echo("=" * 50)
+            
+            # Informações básicas
+            info_table = [
+                {"Campo": "Comandante", "Valor": result['commander']},
+                {"Campo": "Cores", "Valor": ', '.join(result['colors']) if result['colors'] else 'Incolor'},
+                {"Campo": "Total de Cartas", "Valor": str(result['total_cards'])},
+                {"Campo": "Cartas Sementes", "Valor": str(result['seed_cards_used'])},
+                {"Campo": "Cartas Geradas", "Valor": str(result['generated_cards'])},
+                {"Campo": "Método", "Valor": result['generation_method'].replace('_', ' ').title()},
+            ]
+            
+            click.echo("\n📋 Informações do Deck:")
+            click.echo(format_table(info_table, ["Campo", "Valor"]))
+            
+            # Estatísticas
+            if validation.get('stats'):
+                stats = validation['stats']
+                
+                stats_table = [
+                    {"Estatística": "CMC Médio", "Valor": str(stats.get('average_cmc', 'N/A'))},
+                    {"Estatística": "Validade", "Valor": "✅ Válido" if validation['is_valid'] else "❌ Inválido"},
+                ]
+                
+                click.echo(f"\n📊 Estatísticas:")
+                click.echo(format_table(stats_table, ["Estatística", "Valor"]))
+                
+                # Distribuição por tipo
+                if 'type_distribution' in stats and stats['type_distribution']:
+                    click.echo(f"\n📈 Distribuição por Tipo:")
+                    type_table = []
+                    for card_type, count in sorted(stats['type_distribution'].items()):
+                        percentage = (count / result['total_cards']) * 100
+                        type_table.append({
+                            "Tipo": card_type,
+                            "Quantidade": str(count),
+                            "Percentual": f"{percentage:.1f}%"
+                        })
+                    click.echo(format_table(type_table, ["Tipo", "Quantidade", "Percentual"]))
+            
+            # Avisos e erros
+            if validation.get('warnings'):
+                click.echo(f"\n⚠️  Avisos ({len(validation['warnings'])}):")
+                for warning in validation['warnings']:
+                    click.echo(f"   • {warning}")
+            
+            if validation.get('errors'):
+                click.echo(f"\n❌ Erros de Validação ({len(validation['errors'])}):")
+                for error in validation['errors']:
+                    click.echo(f"   • {error}")
+            
+            # Lista de cartas
+            if show_details:
+                click.echo(f"\n🃏 Deck Completo ({len(deck['maindeck'])} cartas):")
+                
+                # Agrupar por fonte
+                seed_cards = [c for c in deck['maindeck'] if c['source'] == 'seed']
+                generated_cards = [c for c in deck['maindeck'] if c['source'] == 'generated']
+                filler_cards = [c for c in deck['maindeck'] if c['source'] == 'filler']
+                
+                if seed_cards:
+                    click.echo(f"\n🌱 Cartas Sementes ({len(seed_cards)}):")
+                    for card in seed_cards:
+                        cmc_info = f" (CMC: {card.get('cmc', '?')})" if 'cmc' in card else ""
+                        click.echo(f"   • {card['name']}{cmc_info}")
+                
+                if generated_cards:
+                    click.echo(f"\n🤖 Cartas Geradas ({len(generated_cards)}):")
+                    for card in generated_cards[:20]:  # Mostrar apenas 20 para não poluir
+                        cmc_info = f" (CMC: {card.get('cmc', '?')})" if 'cmc' in card else ""
+                        score_info = f" [Score: {card.get('score', 0):.2f}]" if 'score' in card else ""
+                        click.echo(f"   • {card['name']}{cmc_info}{score_info}")
+                    
+                    if len(generated_cards) > 20:
+                        click.echo(f"   ... e mais {len(generated_cards) - 20} cartas")
+                
+                if filler_cards:
+                    click.echo(f"\n🔧 Cartas de Preenchimento ({len(filler_cards)}):")
+                    for card in filler_cards[:10]:
+                        click.echo(f"   • {card['name']}")
+                    if len(filler_cards) > 10:
+                        click.echo(f"   ... e mais {len(filler_cards) - 10} cartas")
+            else:
+                # Mostrar apenas uma amostra
+                click.echo(f"\n🃏 Amostra do Deck (primeiras 15 cartas):")
+                for i, card in enumerate(deck['maindeck'][:15]):
+                    source_icon = {"seed": "🌱", "generated": "🤖", "filler": "🔧"}.get(card['source'], "❓")
+                    cmc_info = f" (CMC: {card.get('cmc', '?')})" if 'cmc' in card else ""
+                    click.echo(f"   {source_icon} {card['name']}{cmc_info}")
+                
+                if len(deck['maindeck']) > 15:
+                    click.echo(f"   ... e mais {len(deck['maindeck']) - 15} cartas")
+                    click.echo(f"\n💡 Use --show-details para ver o deck completo")
+            
+            # Salvar arquivo se especificado
+            if output:
+                with open(output, 'w', encoding='utf-8') as f:
+                    json.dump(result, f, indent=2, ensure_ascii=False)
+                click.echo(f"\n💾 Deck salvo em: {output}")
+            
+            # Logging da operação
+            cli_context.log_operation('generate_commander_deck', {
+                'seed_cards_count': len(card_list),
+                'commander': result['commander'],
+                'colors': result['colors'],
+                'total_cards': result['total_cards'],
+                'generation_method': result['generation_method'],
+                'duration': duration,
+                'is_valid': validation['is_valid']
+            })
+        
+        else:
+            click.echo(f"❌ Erro na geração do deck: {result.get('error', 'Erro desconhecido')}")
+    
+    except Exception as e:
+        click.echo(f"❌ Erro na geração: {e}", err=True)
 
 
 if __name__ == '__main__':

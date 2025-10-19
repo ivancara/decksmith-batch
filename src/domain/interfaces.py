@@ -36,7 +36,7 @@ class ExportFormat(Enum):
 @dataclass
 class ModelVersion:
     """Value Object para versão de modelo"""
-    id: Optional[int]
+    id: Optional[Any]  # Pode ser int ou UUID dependendo da implementação
     model_name: str
     version: str
     model_type: ModelType
@@ -189,6 +189,30 @@ class IModelTrainingService(ABC):
         pass
     
     @abstractmethod
+    async def generate_commander_deck(
+        self,
+        seed_cards: List[str],
+        commander: Optional[str] = None,
+        target_colors: Optional[List[str]] = None,
+        deck_size: int = 100,
+        model_version: Optional['ModelVersion'] = None
+    ) -> Dict[str, Any]:
+        """
+        Gera um deck de Commander baseado em cartas sementes
+        
+        Args:
+            seed_cards: Lista de nomes de cartas para usar como base
+            commander: Nome do comandante (opcional)
+            target_colors: Cores desejadas ['W', 'U', 'B', 'R', 'G'] (opcional)
+            deck_size: Tamanho do deck (padrão 100 para Commander)
+            model_version: Versão específica do modelo (usa ativo se None)
+            
+        Returns:
+            Dict com deck gerado e metadados
+        """
+        pass
+    
+    @abstractmethod
     async def validate_model(self, model_version: ModelVersion) -> Dict[str, Any]:
         """Valida um modelo treinado"""
         pass
@@ -288,4 +312,14 @@ class IConfigurationManager(ABC):
     @abstractmethod
     async def get_batch_processing_config(self) -> Dict[str, Any]:
         """Busca configurações de processamento em lote"""
+        pass
+    
+    @abstractmethod
+    def get_database_config(self) -> Dict[str, Any]:
+        """Busca configurações do banco de dados"""
+        pass
+    
+    @abstractmethod
+    def get_scraping_config(self) -> Dict[str, Any]:
+        """Busca configurações de web scraping"""
         pass

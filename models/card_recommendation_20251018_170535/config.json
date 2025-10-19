@@ -1,0 +1,30 @@
+{
+  "model_type": "card_recommendation",
+  "version": "20251018_170535",
+  "architecture": {
+    "layers": 6,
+    "input_shape": [
+      50
+    ],
+    "output_shape": [
+      10
+    ],
+    "total_params": 17194
+  },
+  "training_config": {
+    "epochs": 5,
+    "batch_size": 32,
+    "learning_rate": 0.001,
+    "samples": 500,
+    "description": "Modelo de exemplo - recomenda\u00e7\u00e3o de cartas",
+    "tags": [
+      "exemplo",
+      "tutorial",
+      "demo"
+    ]
+  },
+  "preprocessing": {
+    "scaler_type": "StandardScaler",
+    "feature_count": 50
+  }
+}

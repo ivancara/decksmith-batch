@@ -1,0 +1,780 @@
+{
+  "timestamp": "2025-10-18T17:51:55.143173",
+  "commander": "Generic B+G+R+U+W Commander",
+  "colors": [
+    "B",
+    "G",
+    "R",
+    "U",
+    "W"
+  ],
+  "total_cards": 100,
+  "seed_cards_used": 5,
+  "generated_cards": 95,
+  "generation_method": "rule_based",
+  "system_version": "E1-E4_Real_Implementation",
+  "validation": {
+    "is_valid": false,
+    "warnings": [
+      "Curva de mana muito baixa, considere mais ameaças",
+      "Muitos terrenos (79), pode faltar gas"
+    ],
+    "errors": [
+      "Cartas duplicadas (não básicas): {'Basic R Land': 15, 'Basic U Land': 15, 'Basic W Land': 15, 'Basic B Land': 14, 'Basic G Land': 14}"
+    ],
+    "stats": {
+      "total_cards": 100,
+      "average_cmc": 0.37,
+      "cmc_distribution": {
+        "0": 84,
+        "1": 4,
+        "2": 5,
+        "3": 5,
+        "4": 2
+      },
+      "type_distribution": {
+        "Unknown": 5,
+        "Land": 79,
+        "Artifact": 3,
+        "Instant": 6,
+        "Sorcery": 6,
+        "Enchantment": 1
+      }
+    }
+  },
+  "deck": {
+    "commander": {
+      "name": "Generic B+G+R+U+W Commander",
+      "quantity": 1
+    },
+    "maindeck": [
+      {
+        "name": "Lightning Bolt",
+        "quantity": 1,
+        "source": "seed"
+      },
+      {
+        "name": "Sol Ring",
+        "quantity": 1,
+        "source": "seed"
+      },
+      {
+        "name": "Llanowar Elves",
+        "quantity": 1,
+        "source": "seed"
+      },
+      {
+        "name": "Counterspell",
+        "quantity": 1,
+        "source": "seed"
+      },
+      {
+        "name": "Swords to Plowshares",
+        "quantity": 1,
+        "source": "seed"
+      },
+      {
+        "name": "Swamp",
+        "quantity": 1,
+        "source": "generated",
+        "type": "Land",
+        "score": 1.0,
+        "cmc": 0
+      },
+      {
+        "name": "Forest",
+        "quantity": 1,
+        "source": "generated",
+        "type": "Land",
+        "score": 1.0,
+        "cmc": 0
+      },
+      {
+        "name": "Mountain",
+        "quantity": 1,
+        "source": "generated",
+        "type": "Land",
+        "score": 1.0,
+        "cmc": 0
+      },
+      {
+        "name": "Island",
+        "quantity": 1,
+        "source": "generated",
+        "type": "Land",
+        "score": 1.0,
+        "cmc": 0
+      },
+      {
+        "name": "Plains",
+        "quantity": 1,
+        "source": "generated",
+        "type": "Land",
+        "score": 1.0,
+        "cmc": 0
+      },
+      {
+        "name": "Command Tower",
+        "quantity": 1,
+        "source": "generated",
+        "type": "Land",
+        "score": 1.0,
+        "cmc": 0
+      },
+      {
+        "name": "Sensei's Divining Top",
+        "quantity": 1,
+        "source": "generated",
+        "type": "Artifact",
+        "score": 0.85,
+        "cmc": 1
+      },
+      {
+        "name": "Lightning Greaves",
+        "quantity": 1,
+        "source": "generated",
+        "type": "Artifact",
+        "score": 0.8,
+        "cmc": 2
+      },
+      {
+        "name": "Swiftfoot Boots",
+        "quantity": 1,
+        "source": "generated",
+        "type": "Artifact",
+        "score": 0.75,
+        "cmc": 2
+      },
+      {
+        "name": "Dark Ritual",
+        "quantity": 1,
+        "source": "generated",
+        "type": "Instant",
+        "score": 0.6499999999999999,
+        "cmc": 1
+      },
+      {
+        "name": "Brainstorm",
+        "quantity": 1,
+        "source": "generated",
+        "type": "Instant",
+        "score": 0.6499999999999999,
+        "cmc": 1
+      },
+      {
+        "name": "Path to Exile",
+        "quantity": 1,
+        "source": "generated",
+        "type": "Instant",
+        "score": 0.6499999999999999,
+        "cmc": 1
+      },
+      {
+        "name": "Demonic Tutor",
+        "quantity": 1,
+        "source": "generated",
+        "type": "Sorcery",
+        "score": 0.6,
+        "cmc": 2
+      },
+      {
+        "name": "Rampant Growth",
+        "quantity": 1,
+        "source": "generated",
+        "type": "Sorcery",
+        "score": 0.6,
+        "cmc": 2
+      },
+      {
+        "name": "Cultivate",
+        "quantity": 1,
+        "source": "generated",
+        "type": "Sorcery",
+        "score": 0.5499999999999999,
+        "cmc": 3
+      },
+      {
+        "name": "Chaos Warp",
+        "quantity": 1,
+        "source": "generated",
+        "type": "Instant",
+        "score": 0.5499999999999999,
+        "cmc": 3
+      },
+      {
+        "name": "Wheel of Fortune",
+        "quantity": 1,
+        "source": "generated",
+        "type": "Sorcery",
+        "score": 0.5499999999999999,
+        "cmc": 3
+      },
+      {
+        "name": "Rhystic Study",
+        "quantity": 1,
+        "source": "generated",
+        "type": "Enchantment",
+        "score": 0.5499999999999999,
+        "cmc": 3
+      },
+      {
+        "name": "Boros Charm",
+        "quantity": 1,
+        "source": "generated",
+        "type": "Instant",
+        "score": 0.5,
+        "cmc": 2
+      },
+      {
+        "name": "Damnation",
+        "quantity": 1,
+        "source": "generated",
+        "type": "Sorcery",
+        "score": 0.49999999999999994,
+        "cmc": 4
+      },
+      {
+        "name": "Wrath of God",
+        "quantity": 1,
+        "source": "generated",
+        "type": "Sorcery",
+        "score": 0.49999999999999994,
+        "cmc": 4
+      },
+      {
+        "name": "Heroic Reinforcements",
+        "quantity": 1,
+        "source": "generated",
+        "type": "Instant",
+        "score": 0.44999999999999996,
+        "cmc": 3
+      },
+      {
+        "name": "Basic R Land",
+        "quantity": 1,
+        "source": "filler",
+        "type": "Land",
+        "cmc": 0
+      },
+      {
+        "name": "Basic U Land",
+        "quantity": 1,
+        "source": "filler",
+        "type": "Land",
+        "cmc": 0
+      },
+      {
+        "name": "Basic W Land",
+        "quantity": 1,
+        "source": "filler",
+        "type": "Land",
+        "cmc": 0
+      },
+      {
+        "name": "Basic B Land",
+        "quantity": 1,
+        "source": "filler",
+        "type": "Land",
+        "cmc": 0
+      },
+      {
+        "name": "Basic G Land",
+        "quantity": 1,
+        "source": "filler",
+        "type": "Land",
+        "cmc": 0
+      },
+      {
+        "name": "Basic R Land",
+        "quantity": 1,
+        "source": "filler",
+        "type": "Land",
+        "cmc": 0
+      },
+      {
+        "name": "Basic U Land",
+        "quantity": 1,
+        "source": "filler",
+        "type": "Land",
+        "cmc": 0
+      },
+      {
+        "name": "Basic W Land",
+        "quantity": 1,
+        "source": "filler",
+        "type": "Land",
+        "cmc": 0
+      },
+      {
+        "name": "Basic B Land",
+        "quantity": 1,
+        "source": "filler",
+        "type": "Land",
+        "cmc": 0
+      },
+      {
+        "name": "Basic G Land",
+        "quantity": 1,
+        "source": "filler",
+        "type": "Land",
+        "cmc": 0
+      },
+      {
+        "name": "Basic R Land",
+        "quantity": 1,
+        "source": "filler",
+        "type": "Land",
+        "cmc": 0
+      },
+      {
+        "name": "Basic U Land",
+        "quantity": 1,
+        "source": "filler",
+        "type": "Land",
+        "cmc": 0
+      },
+      {
+        "name": "Basic W Land",
+        "quantity": 1,
+        "source": "filler",
+        "type": "Land",
+        "cmc": 0
+      },
+      {
+        "name": "Basic B Land",
+        "quantity": 1,
+        "source": "filler",
+        "type": "Land",
+        "cmc": 0
+      },
+      {
+        "name": "Basic G Land",
+        "quantity": 1,
+        "source": "filler",
+        "type": "Land",
+        "cmc": 0
+      },
+      {
+        "name": "Basic R Land",
+        "quantity": 1,
+        "source": "filler",
+        "type": "Land",
+        "cmc": 0
+      },
+      {
+        "name": "Basic U Land",
+        "quantity": 1,
+        "source": "filler",
+        "type": "Land",
+        "cmc": 0
+      },
+      {
+        "name": "Basic W Land",
+        "quantity": 1,
+        "source": "filler",
+        "type": "Land",
+        "cmc": 0
+      },
+      {
+        "name": "Basic B Land",
+        "quantity": 1,
+        "source": "filler",
+        "type": "Land",
+        "cmc": 0
+      },
+      {
+        "name": "Basic G Land",
+        "quantity": 1,
+        "source": "filler",
+        "type": "Land",
+        "cmc": 0
+      },
+      {
+        "name": "Basic R Land",
+        "quantity": 1,
+        "source": "filler",
+        "type": "Land",
+        "cmc": 0
+      },
+      {
+        "name": "Basic U Land",
+        "quantity": 1,
+        "source": "filler",
+        "type": "Land",
+        "cmc": 0
+      },
+      {
+        "name": "Basic W Land",
+        "quantity": 1,
+        "source": "filler",
+        "type": "Land",
+        "cmc": 0
+      },
+      {
+        "name": "Basic B Land",
+        "quantity": 1,
+        "source": "filler",
+        "type": "Land",
+        "cmc": 0
+      },
+      {
+        "name": "Basic G Land",
+        "quantity": 1,
+        "source": "filler",
+        "type": "Land",
+        "cmc": 0
+      },
+      {
+        "name": "Basic R Land",
+        "quantity": 1,
+        "source": "filler",
+        "type": "Land",
+        "cmc": 0
+      },
+      {
+        "name": "Basic U Land",
+        "quantity": 1,
+        "source": "filler",
+        "type": "Land",
+        "cmc": 0
+      },
+      {
+        "name": "Basic W Land",
+        "quantity": 1,
+        "source": "filler",
+        "type": "Land",
+        "cmc": 0
+      },
+      {
+        "name": "Basic B Land",
+        "quantity": 1,
+        "source": "filler",
+        "type": "Land",
+        "cmc": 0
+      },
+      {
+        "name": "Basic G Land",
+        "quantity": 1,
+        "source": "filler",
+        "type": "Land",
+        "cmc": 0
+      },
+      {
+        "name": "Basic R Land",
+        "quantity": 1,
+        "source": "filler",
+        "type": "Land",
+        "cmc": 0
+      },
+      {
+        "name": "Basic U Land",
+        "quantity": 1,
+        "source": "filler",
+        "type": "Land",
+        "cmc": 0
+      },
+      {
+        "name": "Basic W Land",
+        "quantity": 1,
+        "source": "filler",
+        "type": "Land",
+        "cmc": 0
+      },
+      {
+        "name": "Basic B Land",
+        "quantity": 1,
+        "source": "filler",
+        "type": "Land",
+        "cmc": 0
+      },
+      {
+        "name": "Basic G Land",
+        "quantity": 1,
+        "source": "filler",
+        "type": "Land",
+        "cmc": 0
+      },
+      {
+        "name": "Basic R Land",
+        "quantity": 1,
+        "source": "filler",
+        "type": "Land",
+        "cmc": 0
+      },
+      {
+        "name": "Basic U Land",
+        "quantity": 1,
+        "source": "filler",
+        "type": "Land",
+        "cmc": 0
+      },
+      {
+        "name": "Basic W Land",
+        "quantity": 1,
+        "source": "filler",
+        "type": "Land",
+        "cmc": 0
+      },
+      {
+        "name": "Basic B Land",
+        "quantity": 1,
+        "source": "filler",
+        "type": "Land",
+        "cmc": 0
+      },
+      {
+        "name": "Basic G Land",
+        "quantity": 1,
+        "source": "filler",
+        "type": "Land",
+        "cmc": 0
+      },
+      {
+        "name": "Basic R Land",
+        "quantity": 1,
+        "source": "filler",
+        "type": "Land",
+        "cmc": 0
+      },
+      {
+        "name": "Basic U Land",
+        "quantity": 1,
+        "source": "filler",
+        "type": "Land",
+        "cmc": 0
+      },
+      {
+        "name": "Basic W Land",
+        "quantity": 1,
+        "source": "filler",
+        "type": "Land",
+        "cmc": 0
+      },
+      {
+        "name": "Basic B Land",
+        "quantity": 1,
+        "source": "filler",
+        "type": "Land",
+        "cmc": 0
+      },
+      {
+        "name": "Basic G Land",
+        "quantity": 1,
+        "source": "filler",
+        "type": "Land",
+        "cmc": 0
+      },
+      {
+        "name": "Basic R Land",
+        "quantity": 1,
+        "source": "filler",
+        "type": "Land",
+        "cmc": 0
+      },
+      {
+        "name": "Basic U Land",
+        "quantity": 1,
+        "source": "filler",
+        "type": "Land",
+        "cmc": 0
+      },
+      {
+        "name": "Basic W Land",
+        "quantity": 1,
+        "source": "filler",
+        "type": "Land",
+        "cmc": 0
+      },
+      {
+        "name": "Basic B Land",
+        "quantity": 1,
+        "source": "filler",
+        "type": "Land",
+        "cmc": 0
+      },
+      {
+        "name": "Basic G Land",
+        "quantity": 1,
+        "source": "filler",
+        "type": "Land",
+        "cmc": 0
+      },
+      {
+        "name": "Basic R Land",
+        "quantity": 1,
+        "source": "filler",
+        "type": "Land",
+        "cmc": 0
+      },
+      {
+        "name": "Basic U Land",
+        "quantity": 1,
+        "source": "filler",
+        "type": "Land",
+        "cmc": 0
+      },
+      {
+        "name": "Basic W Land",
+        "quantity": 1,
+        "source": "filler",
+        "type": "Land",
+        "cmc": 0
+      },
+      {
+        "name": "Basic B Land",
+        "quantity": 1,
+        "source": "filler",
+        "type": "Land",
+        "cmc": 0
+      },
+      {
+        "name": "Basic G Land",
+        "quantity": 1,
+        "source": "filler",
+        "type": "Land",
+        "cmc": 0
+      },
+      {
+        "name": "Basic R Land",
+        "quantity": 1,
+        "source": "filler",
+        "type": "Land",
+        "cmc": 0
+      },
+      {
+        "name": "Basic U Land",
+        "quantity": 1,
+        "source": "filler",
+        "type": "Land",
+        "cmc": 0
+      },
+      {
+        "name": "Basic W Land",
+        "quantity": 1,
+        "source": "filler",
+        "type": "Land",
+        "cmc": 0
+      },
+      {
+        "name": "Basic B Land",
+        "quantity": 1,
+        "source": "filler",
+        "type": "Land",
+        "cmc": 0
+      },
+      {
+        "name": "Basic G Land",
+        "quantity": 1,
+        "source": "filler",
+        "type": "Land",
+        "cmc": 0
+      },
+      {
+        "name": "Basic R Land",
+        "quantity": 1,
+        "source": "filler",
+        "type": "Land",
+        "cmc": 0
+      },
+      {
+        "name": "Basic U Land",
+        "quantity": 1,
+        "source": "filler",
+        "type": "Land",
+        "cmc": 0
+      },
+      {
+        "name": "Basic W Land",
+        "quantity": 1,
+        "source": "filler",
+        "type": "Land",
+        "cmc": 0
+      },
+      {
+        "name": "Basic B Land",
+        "quantity": 1,
+        "source": "filler",
+        "type": "Land",
+        "cmc": 0
+      },
+      {
+        "name": "Basic G Land",
+        "quantity": 1,
+        "source": "filler",
+        "type": "Land",
+        "cmc": 0
+      },
+      {
+        "name": "Basic R Land",
+        "quantity": 1,
+        "source": "filler",
+        "type": "Land",
+        "cmc": 0
+      },
+      {
+        "name": "Basic U Land",
+        "quantity": 1,
+        "source": "filler",
+        "type": "Land",
+        "cmc": 0
+      },
+      {
+        "name": "Basic W Land",
+        "quantity": 1,
+        "source": "filler",
+        "type": "Land",
+        "cmc": 0
+      },
+      {
+        "name": "Basic B Land",
+        "quantity": 1,
+        "source": "filler",
+        "type": "Land",
+        "cmc": 0
+      },
+      {
+        "name": "Basic G Land",
+        "quantity": 1,
+        "source": "filler",
+        "type": "Land",
+        "cmc": 0
+      },
+      {
+        "name": "Basic R Land",
+        "quantity": 1,
+        "source": "filler",
+        "type": "Land",
+        "cmc": 0
+      },
+      {
+        "name": "Basic U Land",
+        "quantity": 1,
+        "source": "filler",
+        "type": "Land",
+        "cmc": 0
+      },
+      {
+        "name": "Basic W Land",
+        "quantity": 1,
+        "source": "filler",
+        "type": "Land",
+        "cmc": 0
+      }
+    ],
+    "type_distribution": {
+      "Land": 6,
+      "Creature": 0,
+      "Instant": 6,
+      "Sorcery": 6,
+      "Artifact": 3,
+      "Enchantment": 1
+    },
+    "color_identity": [
+      "B",
+      "G",
+      "R",
+      "U",
+      "W"
+    ]
+  }
+}

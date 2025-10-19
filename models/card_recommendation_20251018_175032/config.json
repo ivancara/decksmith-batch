@@ -1,0 +1,43 @@
+{
+  "model_type": "card_recommendation",
+  "version": "20251018_175032",
+  "architecture": {
+    "layers": 6,
+    "input_shape": [
+      50
+    ],
+    "output_shape": [
+      10
+    ],
+    "total_params": 17194
+  },
+  "training_config": {
+    "models_directory": "./models",
+    "max_versions": 10,
+    "auto_cleanup": true,
+    "backup_enabled": true,
+    "default_batch_size": 32,
+    "inference_timeout": 30,
+    "data_directory": "./data",
+    "temp_directory": "./temp",
+    "default_algorithm": "deep_learning",
+    "training_split": 0.8,
+    "validation_split": 0.2,
+    "cross_validation_folds": 5,
+    "max_training_time_minutes": 120,
+    "early_stopping": true,
+    "feature_selection": true,
+    "hyperparameter_tuning": false,
+    "model_versioning": true,
+    "metrics_tracking": true,
+    "epochs": 5,
+    "batch_size": 32,
+    "learning_rate": 0.001,
+    "description": "Modelo treinado com dados reais E1-E4",
+    "tags": []
+  },
+  "preprocessing": {
+    "scaler_type": "StandardScaler",
+    "feature_count": 50
+  }
+}
